@@ -129,7 +129,7 @@ func setupMongoDBAndAggregator(t *testing.T, ctx context.Context) (string, func(
 
 	// Initialize round manager
 	rootAggregatorClient := sharding.NewRootAggregatorClientStub()
-	roundManager, err := round.NewRoundManager(ctx, cfg, log, commitmentQueue, mongoStorage, rootAggregatorClient, state.NewSyncStateTracker(), nil, events.NewEventBus(log), smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256)), nil)
+	roundManager, err := round.NewRoundManager(ctx, cfg, log, commitmentQueue, mongoStorage, rootAggregatorClient, state.NewSyncStateTracker(), nil, events.NewEventBus(log), smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)), nil)
 	require.NoError(t, err)
 
 	// Start the round manager (restores SMT)
@@ -322,7 +322,7 @@ func TestGetInclusionProofShardMismatch(t *testing.T) {
 			ShardID: 4,
 		},
 	}
-	tree := smt.NewChildSparseMerkleTree(api.SHA256, 16+256, shardingCfg.Child.ShardID)
+	tree := smt.NewChildSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits, shardingCfg.Child.ShardID)
 	service := newAggregatorServiceForTest(t, shardingCfg, tree)
 
 	invalidShardID := api.RequireNewImprintV2(strings.Repeat("00", 33) + "01")
@@ -338,7 +338,7 @@ func TestGetInclusionProofInvalidRequestFormat(t *testing.T) {
 			ShardID: 4,
 		},
 	}
-	tree := smt.NewChildSparseMerkleTree(api.SHA256, 16+256, shardingCfg.Child.ShardID)
+	tree := smt.NewChildSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits, shardingCfg.Child.ShardID)
 	service := newAggregatorServiceForTest(t, shardingCfg, tree)
 
 	_, err := service.GetInclusionProofV2(context.Background(), &api.GetInclusionProofRequestV2{StateID: api.ImprintV2([]byte("zz"))})
@@ -365,7 +365,7 @@ func TestInclusionProofInvalidPathLength(t *testing.T) {
 	shardingCfg := config.ShardingConfig{
 		Mode: config.ShardingModeStandalone,
 	}
-	tree := smt.NewSparseMerkleTree(api.SHA256, 16+256)
+	tree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	service := newAggregatorServiceForTest(t, shardingCfg, tree)
 
 	validID := createTestCertificationRequests(t, 1)[0].StateID.String()

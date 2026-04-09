@@ -265,7 +265,7 @@ func newTestLogger(t *testing.T) *logger.Logger {
 func newTestPrecollector(t *testing.T, stream chan *models.CertificationRequest, maxPerRound int) (*childPrecollector, *smt.ThreadSafeSMT) {
 	t.Helper()
 	log := newTestLogger(t)
-	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 	if maxPerRound <= 0 {
 		maxPerRound = 10000
 	}
@@ -550,7 +550,7 @@ func TestPreCollectionReparenting(t *testing.T) {
 		defer cancel()
 
 		testLogger := newTestLogger(t)
-		smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+		smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 		initialMainRootHash := smtInstance.GetRootHash()
 
 		// Round N: Create snapshot and add a leaf
@@ -636,7 +636,7 @@ func TestChildPrecollector_DeactivateDuringInFlightRound(t *testing.T) {
 
 	testLogger := newTestLogger(t)
 	rootClient := newBlockingProofRootAggregatorClient()
-	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 
 	rm, err := NewRoundManager(
 		ctx,
@@ -709,7 +709,7 @@ func TestChildRound_ParentProofTimeoutIsRetriable(t *testing.T) {
 
 	testLogger := newTestLogger(t)
 	rootClient := newBlockingProofRootAggregatorClient()
-	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 
 	rm, err := NewRoundManager(
 		ctx,
@@ -776,7 +776,7 @@ func TestStartNewRoundWithSnapshot(t *testing.T) {
 		storage := testutil.SetupTestStorage(t, cfg)
 
 		testLogger := newTestLogger(t)
-		smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+		smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 
 		rm, err := NewRoundManager(
 			ctx,
@@ -845,7 +845,7 @@ func TestPipelinedChildModeFlow(t *testing.T) {
 
 		testLogger := newTestLogger(t)
 		rootAggregatorClient := testsharding.NewRootAggregatorClientStub()
-		smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+		smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 
 		rm, err := NewRoundManager(
 			ctx,
@@ -915,7 +915,7 @@ func TestChildPreCollection_CommitmentAfterProofBeforeRoundEnd_ShouldBeInNextRou
 
 	testLogger := newTestLogger(t)
 	rootAggregatorClient := testsharding.NewRootAggregatorClientStub()
-	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 
 	rm, err := NewRoundManager(
 		ctx,
@@ -984,7 +984,7 @@ func TestChildMode_RequiresFreshParentProof(t *testing.T) {
 
 	testLogger := newTestLogger(t)
 	rootAggregatorClient := newStaleThenFreshRootAggregatorClient(1, 10, 2, 13)
-	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 
 	rootHash, err := api.NewHexBytesFromString(smtInstance.GetRootHash())
 	require.NoError(t, err)

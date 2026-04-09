@@ -135,12 +135,12 @@ func (s *RecoveryTestSuite) createTestData(blockNum int64, commitmentCount int, 
 	}
 
 	// Compute SMT root hash
-	smtTree := smt.NewSparseMerkleTree(api.SHA256, 16+256)
+	smtTree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	leaves := make([]*smt.Leaf, len(commitments))
 	for i, c := range commitments {
 		path, err := c.StateID.GetPath()
 		require.NoError(t, err)
-		leafValue, err := c.CertificationData.ToAPI().Hash()
+		leafValue, err := c.LeafValue()
 		require.NoError(t, err)
 		leaves[i] = smt.NewLeaf(path, leafValue)
 	}
@@ -169,11 +169,11 @@ func (s *RecoveryTestSuite) storeCommitmentsInRedis(commitments []*models.Certif
 func (s *RecoveryTestSuite) storeSmtNodes(commitments []*models.CertificationRequest) {
 	nodes := make([]*models.SmtNode, len(commitments))
 	for i, c := range commitments {
-		path, err := c.StateID.GetPath()
+		keyBytes, err := c.StateID.GetTreeKey()
 		s.Require().NoError(err)
-		leafValue, err := c.CertificationData.ToAPI().Hash()
+		leafValue, err := c.LeafValue()
 		s.Require().NoError(err)
-		nodes[i] = models.NewSmtNode(api.HexBytes(path.Bytes()), leafValue)
+		nodes[i] = models.NewSmtNode(api.HexBytes(keyBytes), leafValue)
 	}
 	err := s.storage.SmtStorage().StoreBatch(s.ctx, nodes)
 	s.Require().NoError(err)
@@ -590,11 +590,11 @@ func (s *RecoveryTestSuite) Test10_PartialSmtNodes_CorrectDetection() {
 	existingIndices := []int{0, 1, 4}
 	existingNodes := make([]*models.SmtNode, len(existingIndices))
 	for i, idx := range existingIndices {
-		path, err := commitments[idx].StateID.GetPath()
+		keyBytes, err := commitments[idx].StateID.GetTreeKey()
 		require.NoError(t, err)
-		leafValue, err := commitments[idx].CertificationData.ToAPI().Hash()
+		leafValue, err := commitments[idx].LeafValue()
 		require.NoError(t, err)
-		existingNodes[i] = models.NewSmtNode(api.HexBytes(path.Bytes()), leafValue)
+		existingNodes[i] = models.NewSmtNode(api.HexBytes(keyBytes), leafValue)
 	}
 	err = s.storage.SmtStorage().StoreBatch(s.ctx, existingNodes)
 	require.NoError(t, err)
@@ -639,12 +639,12 @@ func (s *RecoveryTestSuite) Test11_LoadRecoveredNodesIntoSMT() {
 	}
 
 	// Compute expected root hash
-	expectedSMT := smt.NewSparseMerkleTree(api.SHA256, 16+256)
+	expectedSMT := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	leaves := make([]*smt.Leaf, len(commitments))
 	for i, c := range commitments {
 		path, err := c.StateID.GetPath()
 		require.NoError(t, err)
-		leafValue, err := c.CertificationData.ToAPI().Hash()
+		leafValue, err := c.LeafValue()
 		require.NoError(t, err)
 		leaves[i] = smt.NewLeaf(path, leafValue)
 	}
@@ -656,7 +656,7 @@ func (s *RecoveryTestSuite) Test11_LoadRecoveredNodesIntoSMT() {
 	s.storeSmtNodes(commitments)
 
 	// Create empty SMT to load into
-	targetSMT := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	targetSMT := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 	require.NotEqual(t, expectedRootHash, targetSMT.GetRootHash(), "SMT should be empty initially")
 
 	// Load recovered nodes into SMT

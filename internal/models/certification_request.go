@@ -112,7 +112,9 @@ func (c *CertificationRequest) LeafValue() ([]byte, error) {
 	case 0, 1:
 		return c.ToV1().ToAPI().CreateLeafValue()
 	case 2:
-		return c.CertificationData.ToAPI().Hash()
+		// Yellowpaper semantics: leaf value is the transaction hash bytes.
+		// Accept both legacy-prefixed and raw forms by using DataBytes().
+		return c.CertificationData.TransactionHash.DataBytes(), nil
 	default:
 		return nil, fmt.Errorf("invalid version: %d", c.Version)
 	}

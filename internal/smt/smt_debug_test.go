@@ -46,7 +46,7 @@ func TestAddLeaves_DebugInvalidPath(t *testing.T) {
 		return rh
 	}
 
-	_smt := NewSparseMerkleTree(api.SHA256, 16+256)
+	_smt := NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	{ // mint commitment
 		commJson := map[string]interface{}{
 			"stateId": "00007d535ade796772c5088b095e79a18e282437ee8d8238f5aa9d9c61694948ba9e",

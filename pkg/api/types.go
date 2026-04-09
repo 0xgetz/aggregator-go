@@ -252,10 +252,8 @@ func (p *InclusionProofV2) Verify(v2 *CertificationRequest) error {
 	if err != nil {
 		return fmt.Errorf("failed to get path: %w", err)
 	}
-	expectedLeafValue, err := v2.CertificationData.Hash()
-	if err != nil {
-		return fmt.Errorf("failed to get leaf value: %w", err)
-	}
+	// Yellowpaper semantics: v2 leaf value is transaction hash bytes.
+	expectedLeafValue := v2.CertificationData.TransactionHash.DataBytes()
 	return verify(p.MerkleTreePath, path, expectedLeafValue)
 }
 

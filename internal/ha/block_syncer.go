@@ -167,11 +167,11 @@ func (bs *BlockSyncer) updateSMTForBlock(ctx context.Context, blockRecord *model
 		}
 		uniqueStateIds[key] = struct{}{}
 
-		path, err := stateID.GetPath()
+		keyBytes, err := stateID.GetTreeKey()
 		if err != nil {
-			return fmt.Errorf("failed to get path: %w", err)
+			return fmt.Errorf("failed to get SMT key: %w", err)
 		}
-		leafIDs = append(leafIDs, api.NewHexBytes(path.Bytes()))
+		leafIDs = append(leafIDs, api.NewHexBytes(keyBytes))
 	}
 	// load smt nodes by ids
 	smtNodes, err := bs.storage.SmtStorage().GetByKeys(ctx, leafIDs)
@@ -181,7 +181,11 @@ func (bs *BlockSyncer) updateSMTForBlock(ctx context.Context, blockRecord *model
 	// convert smt nodes to leaves
 	leaves := make([]*smt.Leaf, 0, len(smtNodes))
 	for _, smtNode := range smtNodes {
-		leaves = append(leaves, smt.NewLeaf(new(big.Int).SetBytes(smtNode.Key), smtNode.Value))
+		path, err := api.FixedBytesToPath(smtNode.Key, bs.smt.GetKeyLength())
+		if err != nil {
+			return fmt.Errorf("failed to convert SMT key to path: %w", err)
+		}
+		leaves = append(leaves, smt.NewLeaf(path, smtNode.Value))
 	}
 
 	// apply changes to smt snapshot

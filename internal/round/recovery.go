@@ -3,7 +3,6 @@ package round
 import (
 	"context"
 	"fmt"
-	"math/big"
 
 	"github.com/unicitynetwork/aggregator-go/internal/logger"
 	"github.com/unicitynetwork/aggregator-go/internal/models"
@@ -98,11 +97,11 @@ func recoverBlock(
 
 	smtKeyStrings := make([]string, len(requestIDs))
 	for i, reqID := range requestIDs {
-		path, err := reqID.GetPath()
+		keyBytes, err := reqID.GetTreeKey()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get path for requestID: %w", err)
+			return nil, fmt.Errorf("failed to get SMT key for requestID: %w", err)
 		}
-		smtKeyStrings[i] = api.HexBytes(path.Bytes()).String()
+		smtKeyStrings[i] = api.HexBytes(keyBytes).String()
 	}
 	existingSmtKeys, err := storage.SmtStorage().GetExistingKeys(ctx, smtKeyStrings)
 	if err != nil {
@@ -219,11 +218,11 @@ func recoverMissingData(
 		for _, reqID := range missingSmtKeys {
 			commitment, ok := commitmentMap[reqID.String()]
 			if !ok {
-				path, err := reqID.GetPath()
+				keyBytes, err := reqID.GetTreeKey()
 				if err != nil {
-					return fmt.Errorf("failed to get path for reqID: %w", err)
+					return fmt.Errorf("failed to get SMT key for reqID: %w", err)
 				}
-				existingNode, err := storage.SmtStorage().GetByKey(ctx, path.Bytes())
+				existingNode, err := storage.SmtStorage().GetByKey(ctx, keyBytes)
 				if err != nil {
 					return fmt.Errorf("failed to check existing SMT node: %w", err)
 				}
@@ -233,15 +232,15 @@ func recoverMissingData(
 				return fmt.Errorf("FATAL: commitment not found for SMT key %s", reqID)
 			}
 
-			path, err := commitment.StateID.GetPath()
+			keyBytes, err := commitment.StateID.GetTreeKey()
 			if err != nil {
-				return fmt.Errorf("failed to get path for commitment: %w", err)
+				return fmt.Errorf("failed to get SMT key for commitment: %w", err)
 			}
 			leafValue, err := commitment.LeafValue()
 			if err != nil {
 				return fmt.Errorf("failed to create leaf value: %w", err)
 			}
-			nodes = append(nodes, models.NewSmtNode(path.Bytes(), leafValue))
+			nodes = append(nodes, models.NewSmtNode(keyBytes, leafValue))
 		}
 
 		if len(nodes) > 0 {
@@ -280,11 +279,11 @@ func LoadRecoveredNodesIntoSMT(
 			continue
 		}
 		seen[key] = struct{}{}
-		path, err := reqID.GetPath()
+		keyBytes, err := reqID.GetTreeKey()
 		if err != nil {
-			return fmt.Errorf("failed to get path for requestID %s: %w", reqID, err)
+			return fmt.Errorf("failed to get SMT key for requestID %s: %w", reqID, err)
 		}
-		keys = append(keys, api.HexBytes(path.Bytes()))
+		keys = append(keys, api.HexBytes(keyBytes))
 	}
 
 	nodes, err := storage.SmtStorage().GetByKeys(ctx, keys)
@@ -298,7 +297,10 @@ func LoadRecoveredNodesIntoSMT(
 
 	leaves := make([]*smt.Leaf, len(nodes))
 	for i, node := range nodes {
-		path := new(big.Int).SetBytes(node.Key)
+		path, err := api.FixedBytesToPath(node.Key, smtTree.GetKeyLength())
+		if err != nil {
+			return fmt.Errorf("failed to convert SMT key to path: %w", err)
+		}
 		leaves[i] = smt.NewLeaf(path, node.Value)
 	}
 

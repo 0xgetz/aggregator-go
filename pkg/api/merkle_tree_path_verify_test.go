@@ -20,6 +20,22 @@ func createLeaf(path int64, value []byte) *smt.Leaf {
 	}
 }
 
+func normalizeLegacyPath(t *testing.T, raw string) *big.Int {
+	t.Helper()
+
+	legacyPath, ok := new(big.Int).SetString(raw, 10)
+	require.True(t, ok, "failed to parse path")
+
+	key, err := api.PathToFixedBytes(legacyPath, legacyPath.BitLen()-1)
+	require.NoError(t, err)
+	key, err = api.ImprintV2(key).GetTreeKey()
+	require.NoError(t, err)
+
+	path, err := api.FixedBytesToPath(key, api.StateTreeKeyLengthBits)
+	require.NoError(t, err)
+	return path
+}
+
 // TestMerkleTreePathVerify tests comprehensive verification scenarios
 func TestMerkleTreePathVerify(t *testing.T) {
 	t.Run("SingleLeaf", func(t *testing.T) {
@@ -90,11 +106,13 @@ func TestMerkleTreePathVerify(t *testing.T) {
 	})
 
 	t.Run("LargePaths", func(t *testing.T) {
-		tree := smt.NewSparseMerkleTree(api.SHA256, 272)
+		tree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
-		// Test with the actual large paths from the failing test
-		mintPath, _ := new(big.Int).SetString("7588607046638288532898314259371162887598150843702815116345200719347816808430746270", 10)
-		transferPath, _ := new(big.Int).SetString("7588595804959218369815512972651793411311840553453637142956782535261123804631684864", 10)
+		// These fixtures were captured before the 256-bit tree-key cutover and still
+		// use the old 272-bit sentinel-prefixed path form. Normalize them to the
+		// current 256-bit path representation first.
+		mintPath := normalizeLegacyPath(t, "7588607046638288532898314259371162887598150843702815116345200719347816808430746270")
+		transferPath := normalizeLegacyPath(t, "7588595804959218369815512972651793411311840553453637142956782535261123804631684864")
 
 		leaves := []*smt.Leaf{
 			{Path: mintPath, Value: []byte("mint")},
@@ -213,7 +231,7 @@ func TestMerkleTreePathVerify(t *testing.T) {
 
 	t.Run("RealStateIDs", func(t *testing.T) {
 		// Test with actual stateID format (34-byte with algorithm prefix)
-		tree := smt.NewSparseMerkleTree(api.SHA256, 16+256)
+		tree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
 		// Create stateIDs with proper format
 		stateID1 := "00007d535ade796772c5088b095e79a18e282437ee8d8238f5aa9d9c61694948ba9e"

@@ -51,7 +51,7 @@ func TestBlockSyncer(t *testing.T) {
 
 	// initialize block syncer with isLeader=false
 	mockLeader := &mockLeaderSelector{}
-	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, 16+256))
+	smtInstance := smt.NewThreadSafeSMT(smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
 	stateTracker := state.NewSyncStateTracker()
 	syncer := NewBlockSyncer(testLogger, mockLeader, storage, smtInstance, 0, cfg.Processing.RoundDuration, stateTracker)
 
@@ -94,7 +94,7 @@ func createBlock(t *testing.T, storage *mongodb.Storage, blockNum int64) api.Hex
 		path, err := c.StateID.GetPath()
 		require.NoError(t, err)
 
-		val, err := c.CertificationData.ToAPI().Hash()
+		val, err := c.LeafValue()
 		require.NoError(t, err)
 
 		leaves[i] = &smt.Leaf{Path: path, Value: val}
@@ -107,7 +107,9 @@ func createBlock(t *testing.T, storage *mongodb.Storage, blockNum int64) api.Hex
 	// persist smt nodes
 	smtNodes := make([]*models.SmtNode, len(leaves))
 	for i, leaf := range leaves {
-		key := api.NewHexBytes(leaf.Path.Bytes())
+		keyBytes, err := api.PathToFixedBytes(leaf.Path, api.StateTreeKeyLengthBits)
+		require.NoError(t, err)
+		key := api.NewHexBytes(keyBytes)
 		value := api.NewHexBytes(leaf.Value)
 		smtNodes[i] = models.NewSmtNode(key, value)
 	}
@@ -115,7 +117,7 @@ func createBlock(t *testing.T, storage *mongodb.Storage, blockNum int64) api.Hex
 	require.NoError(t, err)
 
 	// compute rootHash
-	tmpSMT := smt.NewSparseMerkleTree(api.SHA256, 16+256)
+	tmpSMT := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	require.NoError(t, tmpSMT.AddLeaves(leaves))
 	rootHash := api.NewHexBytes(tmpSMT.GetRootHash())
 

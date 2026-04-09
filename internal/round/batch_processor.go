@@ -596,12 +596,19 @@ func (rm *RoundManager) convertLeavesToNodes(leaves []*smt.Leaf) []*models.SmtNo
 		return nil
 	}
 
-	smtNodes := make([]*models.SmtNode, len(leaves))
-	for i, leaf := range leaves {
-		keyBytes := leaf.Path.Bytes()
+	keyLength := rm.smt.GetKeyLength()
+	smtNodes := make([]*models.SmtNode, 0, len(leaves))
+	for _, leaf := range leaves {
+		keyBytes, err := api.PathToFixedBytes(leaf.Path, keyLength)
+		if err != nil {
+			rm.logger.Error("failed to convert leaf path to SMT storage key",
+				"path", leaf.Path.String(),
+				"error", err.Error())
+			continue
+		}
 		key := api.NewHexBytes(keyBytes)
 		value := api.NewHexBytes(leaf.Value)
-		smtNodes[i] = models.NewSmtNode(key, value)
+		smtNodes = append(smtNodes, models.NewSmtNode(key, value))
 	}
 	return smtNodes
 }

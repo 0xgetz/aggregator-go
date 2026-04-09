@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	ErrDuplicateLeaf         = errors.New("smt: duplicate leaf")
-	ErrLeafModification      = errors.New("smt: attempt to modify an existing leaf")
-	ErrKeyLength             = errors.New("smt: invalid key length")
-	ErrWrongShard            = errors.New("smt: key does not belong in this shard")
+	ErrDuplicateLeaf          = errors.New("smt: duplicate leaf")
+	ErrLeafModification       = errors.New("smt: attempt to modify an existing leaf")
+	ErrKeyLength              = errors.New("smt: invalid key length")
+	ErrWrongShard             = errors.New("smt: key does not belong in this shard")
 	ErrInvalidChildHashLength = errors.New("smt: child hash value length does not match hash algorithm")
 )
 
@@ -78,7 +78,7 @@ func NewSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int) *SparseMerk
 		parentMode: false,
 		keyLength:  keyLength,
 		algorithm:  algorithm,
-		root:       newRootBranch(big.NewInt(1), nil, nil),
+		root:       newRootBranch(big.NewInt(1), nil, nil, 0),
 		isSnapshot: false,
 		original:   nil,
 	}
@@ -104,7 +104,7 @@ func NewChildSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int, shardI
 		parentMode: false,
 		keyLength:  keyLength,
 		algorithm:  algorithm,
-		root:       newRootBranch(path, nil, nil),
+		root:       newRootBranch(path, nil, nil, path.BitLen()-1),
 		isSnapshot: false,
 		original:   nil,
 	}
@@ -124,19 +124,19 @@ func NewParentSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int) *Spar
 	// better to ensure all the leaves exist; otherwise the hash values
 	// of siblings of the missing nodes would not match the structure of
 	// the tree and the corresponding inclusion proofs would fail to verify
-	tree.root.Left = populate(0b10, keyLength)
-	tree.root.Right = populate(0b11, keyLength)
+	tree.root.Left = populate(0b10, keyLength, 1)
+	tree.root.Right = populate(0b11, keyLength, 1)
 
 	return tree
 }
 
-func populate(path, levels int) branch {
+func populate(path, levels, depth int) branch {
 	if levels == 1 {
 		return newChildLeafBranch(big.NewInt(int64(path)), nil)
 	}
-	left := populate(0b10, levels-1)
-	right := populate(0b11, levels-1)
-	return newNodeBranch(big.NewInt(int64(path)), left, right)
+	left := populate(0b10, levels-1, depth+1)
+	right := populate(0b11, levels-1, depth+1)
+	return newNodeBranchWithDepth(big.NewInt(int64(path)), left, right, depth)
 }
 
 // CreateSnapshot creates a snapshot of the current SMT state
@@ -206,7 +206,7 @@ func (smt *SparseMerkleTree) CanModify() bool {
 // copyOnWriteRoot creates a new root if this snapshot is sharing it with the original
 func (smt *SparseMerkleTree) copyOnWriteRoot() *NodeBranch {
 	if smt.original != nil && smt.root == smt.original.root {
-		return newRootBranch(smt.root.Path, smt.root.Left, smt.root.Right)
+		return newRootBranch(smt.root.Path, smt.root.Left, smt.root.Right, int(smt.root.Depth))
 	}
 	return smt.root
 }
@@ -219,13 +219,13 @@ func (smt *SparseMerkleTree) cloneBranch(branch branch) branch {
 
 	if branch.isLeaf() {
 		leafBranch := branch.(*LeafBranch)
-		cloned := newLeafBranch(leafBranch.Path, leafBranch.Value)
+		cloned := newLeafBranchWithKey(leafBranch.Path, leafBranch.Key, leafBranch.Value)
 		// Preserve the isChild flag for parent mode trees
 		cloned.isChild = leafBranch.isChild
 		return cloned
 	} else {
 		nodeBranch := branch.(*NodeBranch)
-		return newNodeBranch(nodeBranch.Path, nodeBranch.Left, nodeBranch.Right)
+		return newNodeBranchWithDepth(nodeBranch.Path, nodeBranch.Left, nodeBranch.Right, int(nodeBranch.Depth))
 	}
 }
 
@@ -239,6 +239,7 @@ type branch interface {
 // LeafBranch represents a leaf node
 type LeafBranch struct {
 	Path    *big.Int
+	Key     []byte
 	Value   []byte
 	rawHash [smtCachedHashBytes]byte // inline hash cache; valid when hashSet == true
 	hashSet bool
@@ -248,6 +249,7 @@ type LeafBranch struct {
 // NodeBranch represents an internal node
 type NodeBranch struct {
 	Path    *big.Int
+	Depth   uint8
 	Left    branch
 	Right   branch
 	rawHash [smtCachedHashBytes]byte // inline hash cache; valid when hashSet == true
@@ -257,8 +259,17 @@ type NodeBranch struct {
 
 // NewLeafBranch creates a regular leaf branch
 func newLeafBranch(path *big.Int, value []byte) *LeafBranch {
+	key, err := api.PathToFixedBytes(path, path.BitLen()-1)
+	if err != nil {
+		panic(fmt.Sprintf("smt: failed to derive key bytes for leaf path: %v", err))
+	}
+	return newLeafBranchWithKey(path, key, value)
+}
+
+func newLeafBranchWithKey(path *big.Int, key, value []byte) *LeafBranch {
 	return &LeafBranch{
 		Path:    new(big.Int).Set(path),
+		Key:     append([]byte(nil), key...),
 		Value:   append([]byte(nil), value...),
 		isChild: false,
 		// Hash will be computed on demand
@@ -267,11 +278,19 @@ func newLeafBranch(path *big.Int, value []byte) *LeafBranch {
 
 // NewChildLeafBranch creates a parent tree leaf containing the root hash of a child tree
 func newChildLeafBranch(path *big.Int, value []byte) *LeafBranch {
+	return newChildLeafBranchWithKey(path, nil, value)
+}
+
+func newChildLeafBranchWithKey(path *big.Int, key, value []byte) *LeafBranch {
 	if value != nil {
 		value = append([]byte(nil), value...)
 	}
+	if key != nil {
+		key = append([]byte(nil), key...)
+	}
 	return &LeafBranch{
 		Path:    new(big.Int).Set(path),
+		Key:     key,
 		Value:   value,
 		isChild: true,
 		// Hash will be set on demand
@@ -290,9 +309,12 @@ func (l *LeafBranch) calculateHash(hasher *api.DataHasher) []byte {
 		l.hashSet = true
 		return l.rawHash[:]
 	}
-	pathBytes := api.BigintEncode(l.Path)
-	hasher.Reset().AddData(api.CborArray(2)).
-		AddCborBytes(pathBytes).AddCborBytes(l.Value)
+	// Yellowpaper-style leaf hashing with domain separation:
+	// H(0x00 || key || value)
+	hasher.Reset().
+		AddData([]byte{0x00}).
+		AddData(l.Key).
+		AddData(l.Value)
 	hasher.SumRaw(l.rawHash[:0])
 	l.hashSet = true
 	return l.rawHash[:]
@@ -308,8 +330,13 @@ func (l *LeafBranch) isLeaf() bool {
 
 // NewNodeBranch creates a regular node branch
 func newNodeBranch(path *big.Int, left, right branch) *NodeBranch {
+	return newNodeBranchWithDepth(path, left, right, path.BitLen()-1)
+}
+
+func newNodeBranchWithDepth(path *big.Int, left, right branch, depth int) *NodeBranch {
 	return &NodeBranch{
 		Path:   new(big.Int).Set(path),
+		Depth:  uint8(depth),
 		Left:   left,
 		Right:  right,
 		isRoot: false,
@@ -318,9 +345,10 @@ func newNodeBranch(path *big.Int, left, right branch) *NodeBranch {
 }
 
 // NewRootBranch creates a root node branch
-func newRootBranch(path *big.Int, left, right branch) *NodeBranch {
+func newRootBranch(path *big.Int, left, right branch, depth int) *NodeBranch {
 	return &NodeBranch{
 		Path:   new(big.Int).Set(path),
+		Depth:  uint8(depth),
 		Left:   left,
 		Right:  right,
 		isRoot: true,
@@ -342,29 +370,28 @@ func (n *NodeBranch) calculateHash(hasher *api.DataHasher) []byte {
 		rightHash = n.Right.calculateHash(hasher)
 	}
 
-	hasher.Reset().AddData(api.CborArray(3))
-
-	if n.isRoot && n.Path.BitLen() > 1 {
-		// This is root of a child tree in sharded setup
-		// The path to add is the last bit of the shard ID
-		pos := n.Path.BitLen() - 2
-		path := big.NewInt(int64(2 + n.Path.Bit(pos)))
-		hasher.AddCborBytes(api.BigintEncode(path))
-	} else {
-		// In all other cases we just add the actual path
-		hasher.AddCborBytes(api.BigintEncode(n.Path))
+	// Yellowpaper semantics for unary nodes: hash is child hash.
+	if leftHash == nil && rightHash != nil {
+		copy(n.rawHash[:], rightHash)
+		n.hashSet = true
+		return n.rawHash[:]
+	}
+	if rightHash == nil && leftHash != nil {
+		copy(n.rawHash[:], leftHash)
+		n.hashSet = true
+		return n.rawHash[:]
 	}
 
-	if leftHash == nil {
-		hasher.AddCborNull()
-	} else {
-		hasher.AddCborBytes(leftHash)
+	// Keep root hash stable for empty trees by hashing domain+level when both
+	// children are empty.
+	hasher.Reset().
+		AddData([]byte{0x01}).
+		AddData([]byte{n.Depth})
+	if leftHash != nil {
+		hasher.AddData(leftHash)
 	}
-
-	if rightHash == nil {
-		hasher.AddCborNull()
-	} else {
-		hasher.AddCborBytes(rightHash)
+	if rightHash != nil {
+		hasher.AddData(rightHash)
 	}
 
 	hasher.SumRaw(n.rawHash[:0])
@@ -387,6 +414,10 @@ func (smt *SparseMerkleTree) AddLeaf(path *big.Int, value []byte) error {
 	}
 	if calculateCommonPath(path, smt.root.Path).BitLen() != smt.root.Path.BitLen() {
 		return ErrWrongShard
+	}
+	leafKey, err := api.PathToFixedBytes(path, smt.keyLength)
+	if err != nil {
+		return fmt.Errorf("failed to derive leaf key bytes from path: %w", err)
 	}
 	if smt.parentMode && value != nil && len(value) != hashLen(smt.algorithm) {
 		return ErrInvalidChildHashLength
@@ -412,13 +443,13 @@ func (smt *SparseMerkleTree) AddLeaf(path *big.Int, value []byte) error {
 			} else {
 				rightBranch = smt.root.Right
 			}
-			newRight, err := smt.buildTree(rightBranch, shifted, value)
+			newRight, err := smt.buildTree(rightBranch, shifted, leafKey, value, int(smt.root.Depth))
 			if err != nil {
 				return err
 			}
 			right = newRight
 		} else {
-			right = newLeafBranch(shifted, value)
+			right = newLeafBranchWithKey(shifted, leafKey, value)
 		}
 	} else {
 		if smt.root.Left != nil {
@@ -429,18 +460,18 @@ func (smt *SparseMerkleTree) AddLeaf(path *big.Int, value []byte) error {
 			} else {
 				leftBranch = smt.root.Left
 			}
-			newLeft, err := smt.buildTree(leftBranch, shifted, value)
+			newLeft, err := smt.buildTree(leftBranch, shifted, leafKey, value, int(smt.root.Depth))
 			if err != nil {
 				return err
 			}
 			left = newLeft
 		} else {
-			left = newLeafBranch(shifted, value)
+			left = newLeafBranchWithKey(shifted, leafKey, value)
 		}
 		right = smt.root.Right
 	}
 
-	smt.root = newRootBranch(smt.root.Path, left, right)
+	smt.root = newRootBranch(smt.root.Path, left, right, int(smt.root.Depth))
 	return nil
 }
 
@@ -519,13 +550,14 @@ func (smt *SparseMerkleTree) findLeafInBranch(branch branch, targetPath *big.Int
 	}
 }
 
-// buildTree matches TypeScript buildTree logic exactly
-func (smt *SparseMerkleTree) buildTree(branch branch, remainingPath *big.Int, value []byte) (branch, error) {
+// buildTree updates a subtree while preserving the leaf full key bytes and
+// tracking absolute node depth (0..255) for Yellowpaper node hashing.
+func (smt *SparseMerkleTree) buildTree(branch branch, remainingPath *big.Int, leafKey, value []byte, depthOffset int) (branch, error) {
 	// Special checks for adding a leaf that already exists in the tree
 	if branch.isLeaf() && branch.getPath().Cmp(remainingPath) == 0 {
 		leafBranch := branch.(*LeafBranch)
 		if leafBranch.isChild {
-			return newChildLeafBranch(leafBranch.Path, value), nil
+			return newChildLeafBranchWithKey(leafBranch.Path, leafBranch.Key, value), nil
 		} else if bytes.Equal(leafBranch.Value, value) {
 			return nil, ErrDuplicateLeaf
 		} else {
@@ -550,16 +582,18 @@ func (smt *SparseMerkleTree) buildTree(branch branch, remainingPath *big.Int, va
 
 		// TypeScript: branch.path >> commonPath.length
 		oldBranchPath := new(big.Int).Rsh(leafBranch.Path, uint(commonPath.BitLen()-1))
-		oldBranch := newLeafBranch(oldBranchPath, leafBranch.Value)
+		oldBranch := newLeafBranchWithKey(oldBranchPath, leafBranch.Key, leafBranch.Value)
 
 		// TypeScript: remainingPath >> commonPath.length
 		newBranchPath := new(big.Int).Rsh(remainingPath, uint(commonPath.BitLen()-1))
-		newBranch := newLeafBranch(newBranchPath, value)
+		newBranch := newLeafBranchWithKey(newBranchPath, leafKey, value)
+
+		nodeDepth := depthOffset + (commonPath.BitLen() - 1)
 
 		if isRight {
-			return newNodeBranch(commonPath, oldBranch, newBranch), nil
+			return newNodeBranchWithDepth(commonPath, oldBranch, newBranch, nodeDepth), nil
 		} else {
-			return newNodeBranch(commonPath, newBranch, oldBranch), nil
+			return newNodeBranchWithDepth(commonPath, newBranch, oldBranch, nodeDepth), nil
 		}
 	}
 
@@ -567,30 +601,33 @@ func (smt *SparseMerkleTree) buildTree(branch branch, remainingPath *big.Int, va
 	nodeBranch := branch.(*NodeBranch)
 	if commonPath.Cmp(nodeBranch.Path) < 0 {
 		newBranchPath := new(big.Int).Rsh(remainingPath, uint(commonPath.BitLen()-1))
-		newBranch := newLeafBranch(newBranchPath, value)
+		newBranch := newLeafBranchWithKey(newBranchPath, leafKey, value)
 
 		oldBranchPath := new(big.Int).Rsh(nodeBranch.Path, uint(commonPath.BitLen()-1))
-		oldBranch := newNodeBranch(oldBranchPath, nodeBranch.Left, nodeBranch.Right)
+		oldBranch := newNodeBranchWithDepth(oldBranchPath, nodeBranch.Left, nodeBranch.Right, int(nodeBranch.Depth))
+
+		nodeDepth := depthOffset + (commonPath.BitLen() - 1)
 
 		if isRight {
-			return newNodeBranch(commonPath, oldBranch, newBranch), nil
+			return newNodeBranchWithDepth(commonPath, oldBranch, newBranch, nodeDepth), nil
 		} else {
-			return newNodeBranch(commonPath, newBranch, oldBranch), nil
+			return newNodeBranchWithDepth(commonPath, newBranch, oldBranch, nodeDepth), nil
 		}
 	}
 
+	nextDepthOffset := depthOffset + (commonPath.BitLen() - 1)
 	if isRight {
-		newRight, err := smt.buildTree(nodeBranch.Right, new(big.Int).Rsh(remainingPath, uint(commonPath.BitLen()-1)), value)
+		newRight, err := smt.buildTree(nodeBranch.Right, new(big.Int).Rsh(remainingPath, uint(commonPath.BitLen()-1)), leafKey, value, nextDepthOffset)
 		if err != nil {
 			return nil, err
 		}
-		return newNodeBranch(nodeBranch.Path, nodeBranch.Left, newRight), nil
+		return newNodeBranchWithDepth(nodeBranch.Path, nodeBranch.Left, newRight, int(nodeBranch.Depth)), nil
 	} else {
-		newLeft, err := smt.buildTree(nodeBranch.Left, new(big.Int).Rsh(remainingPath, uint(commonPath.BitLen()-1)), value)
+		newLeft, err := smt.buildTree(nodeBranch.Left, new(big.Int).Rsh(remainingPath, uint(commonPath.BitLen()-1)), leafKey, value, nextDepthOffset)
 		if err != nil {
 			return nil, err
 		}
-		return newNodeBranch(nodeBranch.Path, newLeft, nodeBranch.Right), nil
+		return newNodeBranchWithDepth(nodeBranch.Path, newLeft, nodeBranch.Right, int(nodeBranch.Depth)), nil
 	}
 }
 
