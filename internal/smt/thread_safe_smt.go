@@ -82,6 +82,23 @@ func (ts *ThreadSafeSMT) GetPath(path *big.Int) (*api.MerkleTreePath, error) {
 	return ts.smt.GetPath(path)
 }
 
+// GetRootHashRaw returns the raw 32-byte root hash without algorithm prefix.
+// This is a read operation and allows concurrent access.
+func (ts *ThreadSafeSMT) GetRootHashRaw() []byte {
+	ts.rwMux.RLock()
+	defer ts.rwMux.RUnlock()
+	return ts.smt.GetRootHashRaw()
+}
+
+// GetInclusionCert builds a Yellowpaper inclusion certificate for the leaf
+// at the given raw 32-byte key. This is a read operation and allows
+// concurrent access.
+func (ts *ThreadSafeSMT) GetInclusionCert(key []byte) (*api.InclusionCert, error) {
+	ts.rwMux.RLock()
+	defer ts.rwMux.RUnlock()
+	return ts.smt.GetInclusionCert(key)
+}
+
 // GetKeyLength exposes the configured SMT key length.
 func (ts *ThreadSafeSMT) GetKeyLength() int {
 	ts.rwMux.RLock()

@@ -77,11 +77,13 @@ type leafAddResult struct {
 	rejected           []interfaces.CertificationRequestAck
 }
 
-// ProposeBlock creates and proposes a new block with the given data
-func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigInt, rootHash string) error {
+// ProposeBlock creates and proposes a new block with the given data.
+// rootHash is the raw 32-byte SMT root (no algorithm-id prefix) — the
+// block, UC.IR.h and V2 proof wire all bind against this raw form.
+func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigInt, rootHash api.HexBytes) error {
 	rm.logger.WithContext(ctx).Info("proposeBlock called",
 		"blockNumber", blockNumber.String(),
-		"rootHash", rootHash)
+		"rootHash", rootHash.String())
 
 	rm.roundMutex.Lock()
 	if rm.currentRound != nil {
@@ -94,7 +96,7 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 
 	rm.logger.WithContext(ctx).Info("Creating block proposal",
 		"blockNumber", blockNumber.String(),
-		"rootHash", rootHash)
+		"rootHash", rootHash.String())
 
 	// Get parent block hash
 	var parentHash api.HexBytes
@@ -114,12 +116,6 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 		}
 	}
 
-	// Create block (simplified for now)
-	rootHashBytes, err := api.NewHexBytesFromString(rootHash)
-	if err != nil {
-		return fmt.Errorf("failed to parse root hash %s: %w", rootHash, err)
-	}
-
 	switch rm.config.Sharding.Mode {
 	case config.ShardingModeStandalone:
 		block := models.NewBlock(
@@ -128,7 +124,7 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 			0,
 			rm.config.Chain.Version,
 			rm.config.Chain.ForkID,
-			rootHashBytes,
+			rootHash,
 			parentHash,
 			nil,
 			nil,
@@ -151,22 +147,16 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 			"blockNumber", blockNumber.String())
 		return nil
 	case config.ShardingModeChild:
-		rm.logger.WithContext(ctx).Info("Submitting root hash to parent shard", "rootHash", rootHash)
+		rm.logger.WithContext(ctx).Info("Submitting root hash to parent shard", "rootHash", rootHash.String())
 
-		// Strip algorithm prefix (first 2 bytes) before sending to parent
-		// Parent SMT stores raw 32-byte hashes, not the full 34-byte format with algorithm ID
-		// This is required for JoinPaths to work correctly when combining child and parent proofs
-		if len(rootHashBytes) < 2 {
-			return fmt.Errorf("root hash too short: expected at least 2 bytes for algorithm prefix, got %d", len(rootHashBytes))
-		}
-		rootHashRaw := rootHashBytes[2:] // Remove algorithm identifier
-		if len(rootHashRaw) != 32 {
-			return fmt.Errorf("child root hash has invalid length after stripping prefix: expected 32 bytes, got %d", len(rootHashRaw))
+		if len(rootHash) != api.StateTreeKeyLengthBytes {
+			return fmt.Errorf("child root hash has invalid length: expected %d bytes, got %d",
+				api.StateTreeKeyLengthBytes, len(rootHash))
 		}
 
 		request := &api.SubmitShardRootRequest{
 			ShardID:  rm.config.Sharding.Child.ShardID,
-			RootHash: rootHashRaw,
+			RootHash: rootHash,
 		}
 		submitStart := time.Now()
 		if err := rm.submitShardRootWithRetry(ctx, request); err != nil {
@@ -175,22 +165,23 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 		submissionDuration := time.Since(submitStart)
 		metrics.ParentRootSubmissionDuration.Observe(submissionDuration.Seconds())
 		rm.logger.WithContext(ctx).Info("Root hash submitted to parent, polling for inclusion proof...",
-			"rootHash", rootHashRaw.String(),
+			"rootHash", rootHash.String(),
 			"submissionDuration", submissionDuration)
 
 		proofWaitStart := time.Now()
 		var (
 			proof    *api.RootShardInclusionProof
 			parentUC *types.UnicityCertificate
+			err      error
 		)
 		for {
-			proof, parentUC, err = rm.pollForParentProof(ctx, rootHashRaw.String())
+			proof, parentUC, err = rm.pollForParentProof(ctx, rootHash.String())
 			if err == nil {
 				break
 			}
 			if errors.Is(err, ErrParentProofPollTimeout) {
 				rm.logger.WithContext(ctx).Warn("Parent shard proof poll timed out, continuing to poll",
-					"rootHash", rootHashRaw.String(),
+					"rootHash", rootHash.String(),
 					"timeout", rm.config.Sharding.Child.ParentPollTimeout)
 				continue
 			}
@@ -198,7 +189,7 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 		}
 		proofWait := time.Since(proofWaitStart)
 		rm.logger.WithContext(ctx).Info("Parent shard proof received",
-			"rootHash", rootHashRaw.String(),
+			"rootHash", rootHash.String(),
 			"proofWait", proofWait,
 			"submissionToProof", submissionDuration+proofWait)
 		rm.roundMutex.Lock()
@@ -214,7 +205,7 @@ func (rm *RoundManager) proposeBlock(ctx context.Context, blockNumber *api.BigIn
 			request.ShardID,
 			rm.config.Chain.Version,
 			rm.config.Chain.ForkID,
-			rootHashBytes,
+			rootHash,
 			parentHash,
 			proof.UnicityCertificate,
 			proof.MerkleTreePath,
@@ -486,7 +477,7 @@ func (rm *RoundManager) FinalizeBlock(ctx context.Context, block *models.Block) 
 	rm.roundMutex.Lock()
 	if rm.currentRound != nil {
 		rm.currentRound.Block = block
-		rm.currentRound.PendingRootHash = ""
+		rm.currentRound.PendingRootHash = nil
 		rm.currentRound.PendingLeaves = nil
 		rm.currentRound.PendingCommitments = nil
 		rm.currentRound.Snapshot = nil

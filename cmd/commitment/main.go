@@ -238,7 +238,7 @@ func callJSONRPC(ctx context.Context, client *http.Client, url, authHeader, meth
 	return &rpcResp, nil
 }
 
-func waitForInclusionProof(ctx context.Context, client *http.Client, requestID api.RequestID, requestPath *big.Int, logger *log.Logger) (*api.GetInclusionProofResponseV2, *api.PathVerificationResult, int, error) {
+func waitForInclusionProof(ctx context.Context, client *http.Client, requestID api.RequestID, requestPath *big.Int, logger *log.Logger) (*api.GetInclusionProofResponseV1, *api.PathVerificationResult, int, error) {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(45 * time.Second)
@@ -268,7 +268,7 @@ func waitForInclusionProof(ctx context.Context, client *http.Client, requestID a
 			continue
 		}
 
-		var payload api.GetInclusionProofResponseV2
+		var payload api.GetInclusionProofResponseV1
 		if err := json.Unmarshal(proofResp.Result, &payload); err != nil {
 			logger.Printf("get_inclusion_proof attempt %d decode error: %v", attempts, err)
 			time.Sleep(*flagPollInterval)
@@ -300,7 +300,7 @@ func waitForInclusionProof(ctx context.Context, client *http.Client, requestID a
 	return nil, nil, attempts, fmt.Errorf("timed out waiting for inclusion proof for request %s", requestID)
 }
 
-func verifyProof(resp *api.GetInclusionProofResponseV2, path *big.Int) (*api.PathVerificationResult, error) {
+func verifyProof(resp *api.GetInclusionProofResponseV1, path *big.Int) (*api.PathVerificationResult, error) {
 	if resp == nil || resp.InclusionProof == nil {
 		return nil, fmt.Errorf("inclusion proof payload was empty")
 	}

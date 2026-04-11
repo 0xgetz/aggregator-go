@@ -509,6 +509,102 @@ func (smt *SparseMerkleTree) GetRootHashHex() string {
 	return fmt.Sprintf("%x", buildImprint(smt.algorithm, smt.root.calculateHash(hasher)))
 }
 
+// GetRootHashRaw returns the raw 32-byte root hash without the algorithm
+// prefix. This is the canonical Yellowpaper root hash consumed by
+// api.InclusionCert verification and by UC.IR.h binding.
+func (smt *SparseMerkleTree) GetRootHashRaw() []byte {
+	hasher := api.NewDataHasher(smt.algorithm)
+	raw := smt.root.calculateHash(hasher)
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	return out
+}
+
+// GetInclusionCert builds a Yellowpaper inclusion certificate for the leaf
+// at the given raw 32-byte key. Verifier consumes bitmap + siblings in
+// root-to-leaf wire order; see docs/inclusion-proof-wire.md.
+//
+// Returns an error if no leaf exists at the key. Non-inclusion certificates
+// are produced by a separate path (not yet implemented).
+func (smt *SparseMerkleTree) GetInclusionCert(key []byte) (*api.InclusionCert, error) {
+	if len(key) != api.StateTreeKeyLengthBytes {
+		return nil, fmt.Errorf("%w: got %d, want %d", api.ErrCertKeyLength, len(key), api.StateTreeKeyLengthBytes)
+	}
+
+	// Prime the hash cache by hashing the root. This cascades through every
+	// node reachable from the root, so sibling reads below are cache hits.
+	hasher := api.NewDataHasher(smt.algorithm)
+	_ = smt.root.calculateHash(hasher)
+
+	var cert api.InclusionCert
+	if err := smt.generateInclusionCert(hasher, key, smt.root, &cert); err != nil {
+		return nil, err
+	}
+	return &cert, nil
+}
+
+// generateInclusionCert recursively walks from the current node toward the
+// leaf matching key, appending siblings and setting bitmap bits at every
+// 2-child branching node along the path. Unary passthrough nodes contribute
+// nothing to either the bitmap or the sibling list.
+func (smt *SparseMerkleTree) generateInclusionCert(hasher *api.DataHasher, key []byte, current branch, cert *api.InclusionCert) error {
+	if current == nil {
+		return fmt.Errorf("smt: inclusion cert traversal reached nil subtree")
+	}
+	if current.isLeaf() {
+		leaf := current.(*LeafBranch)
+		if leaf.Key == nil || !bytes.Equal(leaf.Key, key) {
+			return fmt.Errorf("smt: leaf not found for key %x", key)
+		}
+		return nil
+	}
+
+	node := current.(*NodeBranch)
+	if node.Left != nil && node.Right != nil {
+		depth := int(node.Depth)
+		if depth < 0 || depth >= api.StateTreeKeyLengthBits {
+			return fmt.Errorf("smt: invalid branch depth %d", depth)
+		}
+		cert.Bitmap[depth/8] |= 1 << (uint(depth) % 8)
+
+		var sibling, child branch
+		if keyBit(key, depth) == 0 {
+			sibling = node.Right
+			child = node.Left
+		} else {
+			sibling = node.Left
+			child = node.Right
+		}
+
+		sibHash := sibling.calculateHash(hasher)
+		if len(sibHash) != api.SiblingSize {
+			return fmt.Errorf("smt: sibling hash unexpected length: got %d, want %d", len(sibHash), api.SiblingSize)
+		}
+		var sib [api.SiblingSize]byte
+		copy(sib[:], sibHash)
+		cert.Siblings = append(cert.Siblings, sib)
+
+		return smt.generateInclusionCert(hasher, key, child, cert)
+	}
+
+	// Unary passthrough: typically only at the root when the tree holds
+	// ≤1 leaves. The Yellowpaper rule says a single-child node's hash
+	// equals the child's hash, so no bitmap bit and no sibling are added.
+	if node.Left != nil {
+		return smt.generateInclusionCert(hasher, key, node.Left, cert)
+	}
+	if node.Right != nil {
+		return smt.generateInclusionCert(hasher, key, node.Right, cert)
+	}
+	return fmt.Errorf("smt: reached empty subtree in inclusion cert traversal")
+}
+
+// keyBit returns bit d of the raw key under LSB-first byte layout.
+// Matches api.keyBitAt and rugregator's key_bit_at.
+func keyBit(key []byte, d int) byte {
+	return (key[d/8] >> (uint(d) % 8)) & 1
+}
+
 // GetLeaf retrieves a leaf by path (for compatibility)
 func (smt *SparseMerkleTree) GetLeaf(path *big.Int) (*LeafBranch, error) {
 	return smt.findLeafInBranch(smt.root, path)

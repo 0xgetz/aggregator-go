@@ -72,6 +72,26 @@ func (tss *ThreadSafeSmtSnapshot) GetPath(path *big.Int) (*api.MerkleTreePath, e
 	return tss.snapshot.GetPath(path)
 }
 
+// GetRootHashRaw returns the raw 32-byte root hash of the snapshot without
+// algorithm prefix. This is a read operation that can be performed
+// concurrently.
+func (tss *ThreadSafeSmtSnapshot) GetRootHashRaw() []byte {
+	tss.rwMux.RLock()
+	defer tss.rwMux.RUnlock()
+
+	return tss.snapshot.GetRootHashRaw()
+}
+
+// GetInclusionCert builds a Yellowpaper inclusion certificate for the leaf
+// at the given raw 32-byte key in this snapshot. This is a read operation
+// that can be performed concurrently.
+func (tss *ThreadSafeSmtSnapshot) GetInclusionCert(key []byte) (*api.InclusionCert, error) {
+	tss.rwMux.RLock()
+	defer tss.rwMux.RUnlock()
+
+	return tss.snapshot.GetInclusionCert(key)
+}
+
 // GetStats returns statistics about the snapshot
 // This is a read operation that can be performed concurrently
 func (tss *ThreadSafeSmtSnapshot) GetStats() map[string]interface{} {

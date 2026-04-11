@@ -97,7 +97,8 @@ func verifyProofV1(t *testing.T, v1ProofResp *api.GetInclusionProofResponseV1, v
 func verifyProofV2(t *testing.T, v2ProofResp *api.GetInclusionProofResponseV2, v2 *api.CertificationRequest) {
 	require.NotNil(t, v2ProofResp)
 	require.NotNil(t, v2ProofResp.InclusionProof)
-	require.NotNil(t, v2ProofResp.InclusionProof.MerkleTreePath)
+	require.NotEmpty(t, v2ProofResp.InclusionProof.CertificateBytes)
+	require.NotEmpty(t, v2ProofResp.InclusionProof.UnicityCertificate)
 	require.NoError(t, v2ProofResp.InclusionProof.Verify(v2))
 }
 

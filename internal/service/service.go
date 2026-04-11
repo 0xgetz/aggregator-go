@@ -349,17 +349,17 @@ func (as *AggregatorService) GetInclusionProofV1(ctx context.Context, req *api.G
 		return nil, fmt.Errorf("failed to get inclusion proof for request ID %s: %w", req.RequestID, err)
 	}
 
-	// Find the latest block that matches the current SMT root hash
-	rootHash, err := api.NewHexBytesFromString(merkleTreePath.Root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse root hash: %w", err)
-	}
+	// Find the latest block that matches the current SMT root hash. Blocks
+	// are stored with the raw 32-byte root (matching UC.IR.h); the V1 wire
+	// MerkleTreePath.Root still carries the algorithm-prefixed imprint for
+	// back-compat, so we look up by the raw form directly from the SMT.
+	rootHash := api.HexBytes(smtInstance.GetRootHashRaw())
 	block, err := as.storage.BlockStorage().GetLatestByRootHash(ctx, rootHash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest block by root hash: %w", err)
 	}
 	if block == nil {
-		return nil, fmt.Errorf("no block found with root hash %s", rootHash)
+		return nil, fmt.Errorf("no block found with root hash %s", rootHash.String())
 	}
 
 	// Join parent and child SMT paths if sharding mode is enabled
@@ -405,67 +405,67 @@ func (as *AggregatorService) GetInclusionProofV1(ctx context.Context, req *api.G
 	}, nil
 }
 
-// GetInclusionProofV2 retrieves inclusion proof for a commitment
+// GetInclusionProofV2 retrieves a Yellowpaper v2 inclusion proof for the
+// given stateId. In standalone mode it returns a new-wire InclusionCert
+// bound to the current SMT root (via UC.IR.h). Child mode is temporarily
+// unsupported — the v2 wire format does not yet carry joined parent/child
+// proofs, so we surface a clear error until exclusion + child joining are
+// reimplemented.
 func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.GetInclusionProofRequestV2) (*api.GetInclusionProofResponseV2, error) {
 	unlock := as.roundManager.FinalizationReadLock()
 	defer unlock()
 
-	// verify that the state ID matches the shard ID of this aggregator
 	if err := as.certificationRequestValidator.ValidateShardID(req.StateID); err != nil {
 		return nil, fmt.Errorf("state ID validation failed: %w", err)
 	}
 
-	path, err := req.StateID.GetPath()
+	// Strict v2: stateId is raw 32 bytes, no legacy 2-byte algorithm prefix.
+	if len(req.StateID) != api.StateTreeKeyLengthBytes {
+		return nil, fmt.Errorf("invalid state ID length: expected %d bytes (v2 wire format), got %d",
+			api.StateTreeKeyLengthBytes, len(req.StateID))
+	}
+	key, err := req.StateID.GetTreeKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get path for state ID %s: %w", req.StateID, err)
+		return nil, fmt.Errorf("invalid state ID: %w", err)
 	}
 
 	smtInstance := as.roundManager.GetSMT()
 	if smtInstance == nil {
 		return nil, fmt.Errorf("merkle tree not initialized")
 	}
-	if keyLen := smtInstance.GetKeyLength(); path.BitLen()-1 != keyLen {
-		return nil, fmt.Errorf("request path length %d does not match SMT key length %d", path.BitLen()-1, keyLen)
+	if keyLen := smtInstance.GetKeyLength(); keyLen != api.StateTreeKeyLengthBits {
+		return nil, fmt.Errorf("unexpected SMT key length: got %d bits, want %d", keyLen, api.StateTreeKeyLengthBits)
 	}
 
-	merkleTreePath, err := as.roundManager.GetSMT().GetPath(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get inclusion proof for state ID %s: %w", req.StateID, err)
+	if as.config.Sharding.Mode == config.ShardingModeChild {
+		return nil, fmt.Errorf("inclusion proof v2 not yet migrated for child mode")
 	}
 
-	// Find the latest block that matches the current SMT root hash
-	rootHash, err := api.NewHexBytesFromString(merkleTreePath.Root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse root hash: %w", err)
-	}
-	block, err := as.storage.BlockStorage().GetLatestByRootHash(ctx, rootHash)
+	// Bind the UC via the block whose stored rootHash matches the current
+	// raw 32-byte SMT root (which also lives in UC.IR.h).
+	rootHashRaw := api.HexBytes(smtInstance.GetRootHashRaw())
+	block, err := as.storage.BlockStorage().GetLatestByRootHash(ctx, rootHashRaw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest block by root hash: %w", err)
 	}
 	if block == nil {
-		return nil, fmt.Errorf("no block found with root hash %s", rootHash)
+		return nil, fmt.Errorf("no block found with root hash %s", rootHashRaw.String())
 	}
 
-	// Join parent and child SMT paths if sharding mode is enabled
-	if as.config.Sharding.Mode == config.ShardingModeChild {
-		merkleTreePath, err = smt.JoinPaths(merkleTreePath, block.ParentMerkleTreePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to join parent and child aggregator paths: %w", err)
-		}
-	}
-
-	// Check if certification request exists in aggregator records (finalized)
 	record, err := as.storage.AggregatorRecordStorage().GetByStateID(ctx, req.StateID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get aggregator record: %w", err)
 	}
 	if record == nil || record.BlockNumber.Cmp(block.Index.Int) > 0 {
-		// Non-inclusion proof: either record doesn't exist, or it belongs to a
-		// newer block whose SMT state hasn't been committed yet.
+		// Non-inclusion: the v2 ExclusionCert wire path is not yet
+		// implemented in Go. Return an empty-cert payload with
+		// CertificationData == nil so that verifiers short-circuit with
+		// ErrExclusionNotImpl rather than attempting to decode nothing.
 		return &api.GetInclusionProofResponseV2{
+			BlockNumber: block.Index.Uint64(),
 			InclusionProof: &api.InclusionProofV2{
 				CertificationData:  nil,
-				MerkleTreePath:     merkleTreePath,
+				CertificateBytes:   nil,
 				UnicityCertificate: types.RawCBOR(block.UnicityCertificate),
 			},
 		}, nil
@@ -473,11 +473,21 @@ func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.G
 	if record.Version != 2 {
 		return nil, fmt.Errorf("invalid aggregator record version got %d expected 2", record.Version)
 	}
+
+	cert, err := smtInstance.GetInclusionCert(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build inclusion cert for state ID %s: %w", req.StateID, err)
+	}
+	certBytes, err := cert.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal inclusion cert: %w", err)
+	}
+
 	return &api.GetInclusionProofResponseV2{
 		BlockNumber: record.BlockNumber.Uint64(),
 		InclusionProof: &api.InclusionProofV2{
 			CertificationData:  record.CertificationData.ToAPI(),
-			MerkleTreePath:     merkleTreePath,
+			CertificateBytes:   certBytes,
 			UnicityCertificate: types.RawCBOR(block.UnicityCertificate),
 		},
 	}, nil

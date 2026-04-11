@@ -1,6 +1,7 @@
 package round
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -54,8 +55,9 @@ type Round struct {
 	State       RoundState
 	Commitments []*models.CertificationRequest
 	Block       *models.Block
-	// Track commitments that have been added to SMT but not yet finalized in a block
-	PendingRootHash string
+	// Track commitments that have been added to SMT but not yet finalized in a block.
+	// Raw 32-byte SMT root (no algorithm-id prefix), matching the V2 wire format.
+	PendingRootHash api.HexBytes
 	// SMT snapshot for this round - allows accumulating changes before committing
 	Snapshot *smt.ThreadSafeSmtSnapshot
 	// Store data for persistence during FinalizeBlock
@@ -484,9 +486,9 @@ func (rm *RoundManager) processRound(ctx context.Context) error {
 	}
 	rm.roundMutex.Lock()
 	commitmentCount := len(rm.currentRound.Commitments)
-	var rootHash string
+	var rootHash api.HexBytes
 	if rm.currentRound.Snapshot != nil {
-		rootHash = rm.currentRound.Snapshot.GetRootHash()
+		rootHash = rm.currentRound.Snapshot.GetRootHashRaw()
 	}
 	rm.currentRound.PendingRootHash = rootHash
 	rm.currentRound.ProposalTime = time.Now()
@@ -495,7 +497,7 @@ func (rm *RoundManager) processRound(ctx context.Context) error {
 	rm.logger.WithContext(ctx).Info("processRound called",
 		"roundNumber", roundNumber.String(),
 		"commitments", commitmentCount,
-		"rootHash", rootHash)
+		"rootHash", rootHash.String())
 
 	if err := rm.proposeBlock(ctx, roundNumber, rootHash); err != nil {
 		return fmt.Errorf("failed to propose block: %w", err)
@@ -664,8 +666,14 @@ func (rm *RoundManager) restoreSmtFromStorage(ctx context.Context) (*api.BigInt,
 		// Convert storage nodes to SMT leaves
 		leaves := make([]*smt.Leaf, len(nodes))
 		for i, node := range nodes {
-			// Convert key bytes back to big.Int path
-			path := new(big.Int).SetBytes(node.Key)
+			// Restore the sentinel-bit path from the fixed-bytes storage key.
+			// Keys were written via api.PathToFixedBytes (which clears the
+			// sentinel bit); FixedBytesToPath is the inverse and the SMT
+			// AddLeaf path strictly requires the sentinel bit to be set.
+			path, err := api.FixedBytesToPath(node.Key, rm.smt.GetKeyLength())
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert SMT key to path: %w", err)
+			}
 			leaves[i] = smt.NewLeaf(path, node.Value)
 		}
 
@@ -688,12 +696,12 @@ func (rm *RoundManager) restoreSmtFromStorage(ctx context.Context) (*api.BigInt,
 		}
 	}
 
-	// Log final state
-	finalRootHash := rm.smt.GetRootHash()
+	// Log final state (raw 32-byte root matching UC.IR.h / V2 wire format)
+	finalRootHash := api.HexBytes(rm.smt.GetRootHashRaw())
 	rm.logger.Info("SMT restoration complete",
 		"restoredNodes", restoredCount,
 		"totalNodes", totalCount,
-		"finalRootHash", finalRootHash)
+		"finalRootHash", finalRootHash.String())
 
 	if restoredCount != int(totalCount) {
 		rm.logger.Warn("SMT restoration count mismatch",
@@ -709,17 +717,16 @@ func (rm *RoundManager) restoreSmtFromStorage(ctx context.Context) (*api.BigInt,
 		rm.logger.Info("No latest block found, skipping SMT verification")
 		return nil, nil
 	} else {
-		expectedRootHash := latestBlock.RootHash.String()
-		if finalRootHash != expectedRootHash {
+		if !bytes.Equal(finalRootHash, latestBlock.RootHash) {
 			rm.logger.Error("SMT restoration verification failed - root hash mismatch",
-				"restoredRootHash", finalRootHash,
-				"expectedRootHash", expectedRootHash,
+				"restoredRootHash", finalRootHash.String(),
+				"expectedRootHash", latestBlock.RootHash.String(),
 				"latestBlockNumber", latestBlock.Index.String())
 			return nil, fmt.Errorf("SMT restoration verification failed: restored root hash %s does not match latest block root hash %s",
-				finalRootHash, expectedRootHash)
+				finalRootHash.String(), latestBlock.RootHash.String())
 		}
 		rm.logger.Info("SMT restoration verified successfully - root hash matches latest block",
-			"rootHash", finalRootHash,
+			"rootHash", finalRootHash.String(),
 			"latestBlockNumber", latestBlock.Index.String())
 
 		rm.stateTracker.SetLastSyncedBlock(latestBlock.Index.Int)

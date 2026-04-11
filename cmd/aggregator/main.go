@@ -168,9 +168,9 @@ func main() {
 	var smtInstance *smt.SparseMerkleTree
 	switch cfg.Sharding.Mode {
 	case config.ShardingModeStandalone:
-		smtInstance = smt.NewSparseMerkleTree(api.SHA256, 16+256)
+		smtInstance = smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	case config.ShardingModeChild:
-		smtInstance = smt.NewChildSparseMerkleTree(api.SHA256, 16+256, cfg.Sharding.Child.ShardID)
+		smtInstance = smt.NewChildSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits, cfg.Sharding.Child.ShardID)
 	case config.ShardingModeParent:
 		smtInstance = smt.NewParentSparseMerkleTree(api.SHA256, cfg.Sharding.ShardIDLength)
 	default:

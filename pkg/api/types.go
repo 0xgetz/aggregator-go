@@ -109,10 +109,32 @@ type GetInclusionProofResponseV2 struct {
 	InclusionProof *InclusionProofV2 `json:"inclusionProof"`
 }
 
+// InclusionProofV2 is the canonical Yellowpaper v2 inclusion proof payload.
+//
+// Wire form (CBOR toarray):
+//
+//	[
+//	  certificationDataOrNull,
+//	  certificateBytes: bstr,   // InclusionCert or ExclusionCert raw wire form
+//	  unicityCertificate: raw CBOR
+//	]
+//
+// Discriminator:
+//   - CertificationData != nil → inclusion. CertificateBytes is an
+//     InclusionCert wire payload. The SMT key comes from the outer RPC
+//     request (stateId); the leaf value is CertificationData.TransactionHash.
+//   - CertificationData == nil → non-inclusion. CertificateBytes is an
+//     ExclusionCert wire payload. Non-inclusion verification is not yet
+//     implemented in Go.
+//
+// The expected SMT root is ALWAYS taken from UC.IR.h (input record hash
+// of the embedded Unicity Certificate). No root field appears here.
+//
+// See docs/inclusion-proof-wire.md for the frozen specification.
 type InclusionProofV2 struct {
 	_                  struct{}           `cbor:",toarray"`
 	CertificationData  *CertificationData `json:"certificationData"`
-	MerkleTreePath     *MerkleTreePath    `json:"merkleTreePath"`
+	CertificateBytes   HexBytes           `json:"certificateBytes"`
 	UnicityCertificate types.RawCBOR      `json:"unicityCertificate"`
 }
 
@@ -247,14 +269,66 @@ func (c *GetInclusionProofResponseV2) UnmarshalJSON(data []byte) error {
 	return types.Cbor.Unmarshal(hb, c)
 }
 
+// InclusionProofV2HashAlgorithm is the SMT hash algorithm locked in by the
+// v2 inclusion proof wire contract. v2 is a clean-slate cutover and is
+// fixed to SHA-256; switching to SHA-3-256 would require a coordinated
+// version bump across aggregator-go, rugregator, and the client SDKs.
+const InclusionProofV2HashAlgorithm = SHA256
+
+// Verify checks a Yellowpaper v2 inclusion proof against the outer
+// CertificationRequest. The expected SMT root is sourced exclusively from
+// UC.IR.h (strictly 32 raw bytes); CertificateBytes never carries a root.
+// Non-inclusion proofs short-circuit with ErrExclusionNotImpl — v2
+// exclusion verification is not yet implemented in Go.
 func (p *InclusionProofV2) Verify(v2 *CertificationRequest) error {
-	path, err := v2.StateID.GetPath()
-	if err != nil {
-		return fmt.Errorf("failed to get path: %w", err)
+	if p == nil {
+		return errors.New("nil inclusion proof")
 	}
-	// Yellowpaper semantics: v2 leaf value is transaction hash bytes.
-	expectedLeafValue := v2.CertificationData.TransactionHash.DataBytes()
-	return verify(p.MerkleTreePath, path, expectedLeafValue)
+	if v2 == nil {
+		return errors.New("nil certification request")
+	}
+	if p.CertificationData == nil {
+		return ErrExclusionNotImpl
+	}
+
+	rootRaw, err := p.UCInputRecordHashRaw()
+	if err != nil {
+		return err
+	}
+
+	var cert InclusionCert
+	if err := cert.UnmarshalBinary(p.CertificateBytes); err != nil {
+		return fmt.Errorf("failed to decode inclusion cert: %w", err)
+	}
+	key, err := v2.StateID.GetTreeKey()
+	if err != nil {
+		return fmt.Errorf("failed to derive SMT key from stateId: %w", err)
+	}
+	// v2 leaf value is the raw transaction hash.
+	value := v2.CertificationData.TransactionHash.DataBytes()
+	return cert.Verify(key, value, rootRaw, InclusionProofV2HashAlgorithm)
+}
+
+// UCInputRecordHashRaw decodes the embedded Unicity Certificate and
+// returns UC.IR.h as a raw 32-byte hash. v2 is a strict cutover: any
+// other length is rejected (no legacy 2-byte-prefix tolerance).
+func (p *InclusionProofV2) UCInputRecordHashRaw() ([]byte, error) {
+	if len(p.UnicityCertificate) == 0 {
+		return nil, errors.New("missing unicity certificate")
+	}
+	var uc types.UnicityCertificate
+	if err := types.Cbor.Unmarshal(p.UnicityCertificate, &uc); err != nil {
+		return nil, fmt.Errorf("failed to decode unicity certificate: %w", err)
+	}
+	if uc.InputRecord == nil {
+		return nil, errors.New("unicity certificate missing input record")
+	}
+	ir := uc.InputRecord.Hash
+	if len(ir) != StateTreeKeyLengthBytes {
+		return nil, fmt.Errorf("invalid UC.IR.h length: got %d, want %d",
+			len(ir), StateTreeKeyLengthBytes)
+	}
+	return append([]byte(nil), ir...), nil
 }
 
 func verify(p *MerkleTreePath, path *big.Int, expectedLeafValue []byte) error {

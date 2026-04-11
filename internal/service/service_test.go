@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -226,60 +227,31 @@ func makeJSONRPCRequest[T any](t *testing.T, serverAddr, method, requestID strin
 	return result
 }
 
-// Helper function to validate inclusion proof structure and encoding
-func validateInclusionProof(t *testing.T, proof *api.InclusionProofV2, stateID api.StateID) {
+// validateInclusionProof validates the v2 inclusion proof wire structure
+// and performs end-to-end verification against the originating
+// CertificationRequest via the new InclusionCert + UC.IR.h binding.
+func validateInclusionProof(t *testing.T, proof *api.InclusionProofV2, req *api.CertificationRequest) {
 	assert.NotNil(t, proof.CertificationData, "Should have certification data")
-	assert.NotNil(t, proof.MerkleTreePath, "Should have merkle tree path")
+	assert.NotEmpty(t, proof.CertificateBytes, "Should have inclusion cert bytes")
+	assert.NotEmpty(t, proof.UnicityCertificate, "Unicity certificate should not be empty")
 
-	// Validate unicity certificate field
-	if len(proof.UnicityCertificate) > 0 {
-		assert.NotEmpty(t, proof.UnicityCertificate, "Unicity certificate should not be empty")
-	}
+	assert.NotEmpty(t, proof.CertificationData.OwnerPredicate, "CertificationData should have owner predicate")
+	assert.NotEmpty(t, proof.CertificationData.Witness, "CertificationData should have signature")
+	assert.NotEmpty(t, proof.CertificationData.SourceStateHash, "CertificationData should have source state hash")
+	assert.NotEmpty(t, proof.CertificationData.TransactionHash, "CertificationData should have transaction hash")
 
-	// Validate certification data encoding
-	if proof.CertificationData != nil {
-		assert.NotEmpty(t, proof.CertificationData.OwnerPredicate, "CertificationData should have owner predicate")
-		assert.NotEmpty(t, proof.CertificationData.Witness, "CertificationData should have signature")
-		assert.NotEmpty(t, proof.CertificationData.SourceStateHash, "CertificationData should have source state hash")
-		assert.NotEmpty(t, proof.CertificationData.TransactionHash, "CertificationData should have transaction hash")
+	// Verify CBOR round-trip of certification data.
+	certDataBytes, err := cbor.Marshal(proof.CertificationData)
+	require.NoError(t, err, "CertificationData should be CBOR encodable")
+	assert.NotEmpty(t, certDataBytes, "CBOR encoded certification data should not be empty")
+	var decodedAuth api.CertificationData
+	require.NoError(t, cbor.Unmarshal(certDataBytes, &decodedAuth))
 
-		// Verify CBOR encoding of certification data
-		certDataBytes, err := cbor.Marshal(proof.CertificationData)
-		require.NoError(t, err, "CertificationData should be CBOR encodable")
-		assert.NotEmpty(t, certDataBytes, "CBOR encoded certification data should not be empty")
+	// Wire-decode the inclusion certificate and perform full v2 verification.
+	var cert api.InclusionCert
+	require.NoError(t, cert.UnmarshalBinary(proof.CertificateBytes), "InclusionCert must decode")
 
-		// Verify we can decode it back
-		var decodedAuth api.CertificationData
-		err = cbor.Unmarshal(certDataBytes, &decodedAuth)
-		require.NoError(t, err, "Should be able to decode CBOR certification data")
-	}
-
-	// Validate merkle tree path encoding
-	if proof.MerkleTreePath != nil {
-		assert.NotEmpty(t, proof.MerkleTreePath.Root, "Merkle path should have root")
-		assert.NotNil(t, proof.MerkleTreePath.Steps, "Merkle path should have steps")
-
-		// Verify Merkle tree path with state ID
-		stateIDBigInt, err := stateID.GetPath()
-		require.NoError(t, err, "Should be able to get path from stateID")
-
-		verificationResult, err := proof.MerkleTreePath.Verify(stateIDBigInt)
-		require.NoError(t, err, "Merkle tree path verification should not error")
-		assert.True(t, verificationResult.PathValid, "Merkle tree path should be valid")
-		assert.True(t, verificationResult.PathIncluded, "Request should be included in the Merkle tree")
-		assert.True(t, verificationResult.Result, "Overall verification result should be true")
-
-		// Verify CBOR encoding of merkle tree path
-		pathBytes, err := cbor.Marshal(proof.MerkleTreePath)
-		require.NoError(t, err, "Merkle tree path should be CBOR encodable")
-		assert.NotEmpty(t, pathBytes, "CBOR encoded merkle path should not be empty")
-
-		// Verify we can decode it back
-		var decodedPath api.MerkleTreePath
-		err = cbor.Unmarshal(pathBytes, &decodedPath)
-		require.NoError(t, err, "Should be able to decode CBOR merkle path")
-		assert.Equal(t, proof.MerkleTreePath.Root, decodedPath.Root, "Decoded merkle path should match original")
-	}
+	require.NoError(t, proof.Verify(req), "v2 inclusion proof must verify")
 }
 
 // TestInclusionProofMissingRecord tests getting inclusion proof for non-existent record
@@ -294,11 +266,9 @@ func (suite *AggregatorTestSuite) TestInclusionProofMissingRecord() {
 	// Wait for block processing
 	time.Sleep(3 * time.Second)
 
-	// Now test non-inclusion proof for a different state ID
-	stateId := ""
-	for i := 0; i < 2+32; i++ {
-		stateId = stateId + "00"
-	}
+	// Now test non-inclusion proof for a raw 32-byte v2 state ID that has
+	// never been submitted.
+	stateId := strings.Repeat("00", api.StateTreeKeyLengthBytes)
 	inclusionProof := makeJSONRPCRequest[api.GetInclusionProofResponseV2](suite.T(),
 		suite.serverAddr,
 		"get_inclusion_proof.v2",
@@ -306,13 +276,12 @@ func (suite *AggregatorTestSuite) TestInclusionProofMissingRecord() {
 		&api.GetInclusionProofRequestV2{StateID: api.RequireNewImprintV2(stateId)},
 	)
 
-	// Validate non-inclusion proof structure
+	// v2 non-inclusion: ExclusionCert wire path is not yet implemented. The
+	// service returns an empty-cert payload with CertificationData == nil
+	// plus a bound UnicityCertificate for round-trip.
 	suite.Nil(inclusionProof.InclusionProof.CertificationData)
-	suite.NotNil(inclusionProof.InclusionProof.MerkleTreePath)
-
-	// Verify that UnicityCertificate is included in non-inclusion proof
-	suite.NotNil(inclusionProof.InclusionProof.UnicityCertificate, "Non-inclusion proof should include UnicityCertificate")
-	suite.NotEmpty(inclusionProof.InclusionProof.UnicityCertificate, "UnicityCertificate should not be empty")
+	suite.Empty(inclusionProof.InclusionProof.CertificateBytes)
+	suite.NotEmpty(inclusionProof.InclusionProof.UnicityCertificate, "Non-inclusion proof should include UnicityCertificate")
 }
 
 func TestGetInclusionProofShardMismatch(t *testing.T) {
@@ -325,7 +294,8 @@ func TestGetInclusionProofShardMismatch(t *testing.T) {
 	tree := smt.NewChildSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits, shardingCfg.Child.ShardID)
 	service := newAggregatorServiceForTest(t, shardingCfg, tree)
 
-	invalidShardID := api.RequireNewImprintV2(strings.Repeat("00", 33) + "01")
+	// Raw 32-byte v2 stateId whose low bits don't match shard 4 (=0b100).
+	invalidShardID := api.RequireNewImprintV2(strings.Repeat("00", api.StateTreeKeyLengthBytes-1) + "01")
 	_, err := service.GetInclusionProofV2(context.Background(), &api.GetInclusionProofRequestV2{StateID: invalidShardID})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "state ID validation failed")
@@ -355,7 +325,8 @@ func TestGetInclusionProofSMTUnavailable(t *testing.T) {
 	}
 	service := newAggregatorServiceForTest(t, shardingCfg, nil)
 
-	validID := api.RequireNewImprintV2(strings.Repeat("00", 34))
+	// Raw 32-byte v2 stateId; all-zero low bits match shard 4 (expected = 0b00).
+	validID := api.RequireNewImprintV2(strings.Repeat("00", api.StateTreeKeyLengthBytes))
 	_, err := service.GetInclusionProofV2(t.Context(), &api.GetInclusionProofRequestV2{StateID: validID})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "merkle tree not initialized")
@@ -368,47 +339,48 @@ func TestInclusionProofInvalidPathLength(t *testing.T) {
 	tree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	service := newAggregatorServiceForTest(t, shardingCfg, tree)
 
-	validID := createTestCertificationRequests(t, 1)[0].StateID.String()
-	require.Greater(t, len(validID), 2)
-	badID := api.RequireNewImprintV2(validID[2:])
+	// Drop one byte from the canonical 32-byte stateId — v2 strict enforcement
+	// must reject it at length validation, before any SMT traversal.
+	validID := createTestCertificationRequests(t, 1)[0].StateID
+	require.Len(t, validID, api.StateTreeKeyLengthBytes)
+	badID := api.ImprintV2(append([]byte(nil), validID[:len(validID)-1]...))
 
 	_, err := service.GetInclusionProofV2(context.Background(), &api.GetInclusionProofRequestV2{StateID: badID})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "path length")
+	assert.Contains(t, err.Error(), "invalid state ID length")
 }
 
 // TestInclusionProof tests the complete inclusion proof workflow
 func (suite *AggregatorTestSuite) TestInclusionProof() {
 	// 1) Send commitments
 	testRequests := createTestCertificationRequests(suite.T(), 3)
-	var submittedStateIDs []api.StateID
 
 	for i, req := range testRequests {
 		submitResponse := makeJSONRPCRequest[api.CertificationResponse](
 			suite.T(), suite.serverAddr, "certification_request", fmt.Sprintf("submit-%d", i), req)
 
 		suite.Equal("SUCCESS", submitResponse.Status, "Should return SUCCESS status")
-		submittedStateIDs = append(submittedStateIDs, req.StateID)
 	}
 
 	// Wait for block processing
 	time.Sleep(3 * time.Second)
 
-	// 2) Verify inclusion proofs and store root hashes
-	firstBatchRootHashes := make(map[string]string) // stateID => rootHash
+	// 2) Verify inclusion proofs and store bound UC roots for the stability
+	//    check below. With the v2 wire, the authoritative root identity is
+	//    UC.IR.h, sourced from the proof's UnicityCertificate.
+	firstBatchRoots := make(map[string]string) // stateID => hex(UC.IR.h)
 
-	for _, stateID := range submittedStateIDs {
-		proofRequest := &api.GetInclusionProofRequestV2{StateID: stateID}
+	for _, req := range testRequests {
+		proofRequest := &api.GetInclusionProofRequestV2{StateID: req.StateID}
 		proofResponse := makeJSONRPCRequest[api.GetInclusionProofResponseV2](
 			suite.T(), suite.serverAddr, "get_inclusion_proof.v2", "get-proof", proofRequest)
 
-		// Validate inclusion proof structure and encoding
-		validateInclusionProof(suite.T(), proofResponse.InclusionProof, stateID)
+		// Validate inclusion proof structure and encoding + end-to-end verify.
+		validateInclusionProof(suite.T(), proofResponse.InclusionProof, req)
 
-		// Store root hash for later stability check
-		suite.Require().NotNil(proofResponse.InclusionProof.MerkleTreePath)
-		rootHash := proofResponse.InclusionProof.MerkleTreePath.Root
-		firstBatchRootHashes[stateID.String()] = rootHash
+		rootRaw, err := proofResponse.InclusionProof.UCInputRecordHashRaw()
+		suite.Require().NoError(err)
+		firstBatchRoots[req.StateID.String()] = hex.EncodeToString(rootRaw)
 	}
 
 	// 3) Send more requests
@@ -422,24 +394,25 @@ func (suite *AggregatorTestSuite) TestInclusionProof() {
 	// Wait for new block processing
 	time.Sleep(3 * time.Second)
 
-	// 4) Verify original commitments now reference current root hash
-	for _, stateID := range submittedStateIDs {
-		proofRequest := &api.GetInclusionProofRequestV2{StateID: stateID}
+	// 4) Verify original commitments now reference current root hash (UC.IR.h).
+	for _, req := range testRequests {
+		proofRequest := &api.GetInclusionProofRequestV2{StateID: req.StateID}
 		proofResponse := makeJSONRPCRequest[api.GetInclusionProofResponseV2](
 			suite.T(), suite.serverAddr, "get_inclusion_proof.v2", "stability-check", proofRequest)
 
-		suite.Require().NotNil(proofResponse.InclusionProof.MerkleTreePath)
-		currentRootHash := proofResponse.InclusionProof.MerkleTreePath.Root
-		originalRootHash, exists := firstBatchRootHashes[stateID.String()]
+		currentRootRaw, err := proofResponse.InclusionProof.UCInputRecordHashRaw()
+		suite.Require().NoError(err)
+		currentRootHash := hex.EncodeToString(currentRootRaw)
 
-		suite.True(exists, "Should have stored original root hash for %s", stateID)
+		originalRootHash, exists := firstBatchRoots[req.StateID.String()]
+		suite.True(exists, "Should have stored original root hash for %s", req.StateID)
 		// With on-demand proof generation, the root hash should now be different (current SMT state)
 		suite.NotEqual(originalRootHash, currentRootHash,
 			"Root hash in inclusion proof should be current (not original) for StateID %s. Original: %s, Current: %s",
-			stateID, originalRootHash, currentRootHash)
+			req.StateID, originalRootHash, currentRootHash)
 
 		// Validate that the proof is still valid for the commitment
-		validateInclusionProof(suite.T(), proofResponse.InclusionProof, stateID)
+		validateInclusionProof(suite.T(), proofResponse.InclusionProof, req)
 	}
 }
 
