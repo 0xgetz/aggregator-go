@@ -51,9 +51,7 @@ func (ts *ThreadSafeSMT) AddPreHashedLeaf(path *big.Int, hash []byte) error {
 	ts.rwMux.Lock()
 	defer ts.rwMux.Unlock()
 
-	// TODO(SMT): Implement AddPreHashedLeaf in SparseMerkleTree
-	//return ts.smt.AddPreHashedLeaf(path, hash)
-	return nil
+	return ts.smt.AddLeaf(path, hash)
 }
 
 // GetRootHash returns the current root hash

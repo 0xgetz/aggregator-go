@@ -66,14 +66,14 @@ func TestBlockSyncer(t *testing.T) {
 	time.Sleep(2 * cfg.Processing.RoundDuration)
 
 	// SMT root hash should match persisted block root hash after block sync
-	require.Equal(t, rootHash.String(), smtInstance.GetRootHash())
+	require.Equal(t, rootHash.String(), api.HexBytes(smtInstance.GetRootHashRaw()).String())
 	require.Equal(t, big.NewInt(1), stateTracker.GetLastSyncedBlock())
 
 	// verify the blocks are not synced if node is leader
 	mockLeader.isLeader.Store(true)
 	createBlock(t, storage, 2)
 	time.Sleep(2 * cfg.Processing.RoundDuration)
-	require.Equal(t, rootHash.String(), smtInstance.GetRootHash())
+	require.Equal(t, rootHash.String(), api.HexBytes(smtInstance.GetRootHashRaw()).String())
 	require.Equal(t, big.NewInt(1), stateTracker.GetLastSyncedBlock())
 
 }
@@ -119,7 +119,7 @@ func createBlock(t *testing.T, storage *mongodb.Storage, blockNum int64) api.Hex
 	// compute rootHash
 	tmpSMT := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	require.NoError(t, tmpSMT.AddLeaves(leaves))
-	rootHash := api.NewHexBytes(tmpSMT.GetRootHash())
+	rootHash := api.HexBytes(tmpSMT.GetRootHashRaw())
 
 	// persist block
 	block := models.NewBlock(blockNumber, "unicity", 0, "1.0", "mainnet", rootHash, nil, nil, nil)

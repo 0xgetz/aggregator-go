@@ -139,7 +139,7 @@ func (bs *BlockSyncer) SyncToLatestBlock(ctx context.Context) error {
 	return nil
 }
 
-func (bs *BlockSyncer) verifySMTForBlock(ctx context.Context, smtRootHash string, blockNumber *api.BigInt) error {
+func (bs *BlockSyncer) verifySMTForBlock(ctx context.Context, smtRootHash api.HexBytes, blockNumber *api.BigInt) error {
 	block, err := bs.storage.BlockStorage().GetByNumber(ctx, blockNumber)
 	if err != nil {
 		return fmt.Errorf("failed to fetch block: %w", err)
@@ -147,10 +147,10 @@ func (bs *BlockSyncer) verifySMTForBlock(ctx context.Context, smtRootHash string
 	if block == nil {
 		return fmt.Errorf("block not found for block number: %s", blockNumber.String())
 	}
-	expectedRootHash := block.RootHash.String()
-	if smtRootHash != expectedRootHash {
+	expectedRootHash := block.RootHash
+	if smtRootHash.String() != expectedRootHash.String() {
 		return fmt.Errorf("smt root hash %s does not match latest block root hash %s",
-			smtRootHash, expectedRootHash)
+			smtRootHash.String(), expectedRootHash.String())
 	}
 	return nil
 }
@@ -190,11 +190,11 @@ func (bs *BlockSyncer) updateSMTForBlock(ctx context.Context, blockRecord *model
 
 	// apply changes to smt snapshot
 	snapshot := bs.smt.CreateSnapshot()
-	smtRootHash, err := snapshot.AddLeaves(leaves)
-	if err != nil {
+	if _, err := snapshot.AddLeaves(leaves); err != nil {
 		return fmt.Errorf("failed to apply SMT updates for block %s: %w", blockRecord.BlockNumber.String(), err)
 	}
-	// verify smt root hash matches block store root hash
+	smtRootHash := api.HexBytes(snapshot.GetRootHashRaw())
+	// verify smt root hash matches the raw 32-byte block root hash
 	if err := bs.verifySMTForBlock(ctx, smtRootHash, blockRecord.BlockNumber); err != nil {
 		return fmt.Errorf("failed to verify SMT: %w", err)
 	}
