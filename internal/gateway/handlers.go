@@ -52,8 +52,7 @@ func (s *Server) parseCertificationRequest(params json.RawMessage) (*api.Certifi
 
 // handleGetInclusionProofV2 handles the get_inclusion_proof.v2 method.
 //
-// v2 is a strict cutover: stateId must be exactly 32 raw bytes (no legacy
-// 2-byte algorithm prefix). Frozen by docs/inclusion-proof-wire.md.
+// v2 requires stateId to be exactly 32 raw bytes with no algorithm prefix.
 func (s *Server) handleGetInclusionProofV2(ctx context.Context, params json.RawMessage) (interface{}, *jsonrpc.Error) {
 	var req api.GetInclusionProofRequestV2
 	if err := json.Unmarshal(params, &req); err != nil {

@@ -115,10 +115,102 @@ func TestInclusionProofV2Verify_NonInclusionShortCircuits(t *testing.T) {
 	require.True(t, errors.Is(err, ErrExclusionNotImpl))
 }
 
-// TestInclusionProofV2Verify_RejectsLegacyImprintUC confirms that v2 is a
-// strict cutover: a 34-byte (algorithm-prefixed imprint) UC.IR.h is
-// rejected rather than silently stripped.
-func TestInclusionProofV2Verify_RejectsLegacyImprintUC(t *testing.T) {
+// TestInclusionProofV2Verify_MissingRequestTxHash checks that malformed
+// outer requests fail fast with a clear error instead of relying on deeper
+// cert verification.
+func TestInclusionProofV2Verify_MissingRequestTxHash(t *testing.T) {
+	stateID := RequireNewImprintV2("1111111111111111111111111111111111111111111111111111111111111111")
+	txHash := RequireNewImprintV2("2222222222222222222222222222222222222222222222222222222222222222")
+
+	// Build a valid proof envelope first.
+	key, err := stateID.GetTreeKey()
+	require.NoError(t, err)
+	hasher := NewDataHasher(InclusionProofV2HashAlgorithm)
+	hasher.Reset().
+		AddData([]byte{0x00}).
+		AddData(key).
+		AddData(txHash.DataBytes())
+	root := append([]byte(nil), hasher.GetHash().RawHash...)
+
+	cert := &InclusionCert{}
+	certBytes, err := cert.MarshalBinary()
+	require.NoError(t, err)
+	ucBytes, err := types.Cbor.Marshal(types.UnicityCertificate{
+		InputRecord: &types.InputRecord{Hash: root},
+	})
+	require.NoError(t, err)
+
+	proof := &InclusionProofV2{
+		CertificationData: &CertificationData{
+			TransactionHash: txHash,
+		},
+		CertificateBytes:   certBytes,
+		UnicityCertificate: ucBytes,
+	}
+
+	// Malformed request: missing tx hash.
+	req := &CertificationRequest{
+		StateID: stateID,
+		CertificationData: CertificationData{
+			TransactionHash: nil,
+		},
+	}
+
+	err = proof.Verify(req)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing certification request transaction hash")
+}
+
+// TestInclusionProofV2Verify_MismatchedProofTxHashFails ensures the proof
+// payload cannot carry a different tx hash than the outer request while
+// still verifying against the request's leaf value.
+func TestInclusionProofV2Verify_MismatchedProofTxHashFails(t *testing.T) {
+	stateID := RequireNewImprintV2("1111111111111111111111111111111111111111111111111111111111111111")
+	reqTxHash := RequireNewImprintV2("2222222222222222222222222222222222222222222222222222222222222222")
+	proofTxHash := RequireNewImprintV2("3333333333333333333333333333333333333333333333333333333333333333")
+
+	req := &CertificationRequest{
+		StateID: stateID,
+		CertificationData: CertificationData{
+			TransactionHash: reqTxHash,
+		},
+	}
+
+	// Build a valid root for the request tx hash so the only failure is the
+	// proof/request consistency check.
+	key, err := stateID.GetTreeKey()
+	require.NoError(t, err)
+	hasher := NewDataHasher(InclusionProofV2HashAlgorithm)
+	hasher.Reset().
+		AddData([]byte{0x00}).
+		AddData(key).
+		AddData(reqTxHash.DataBytes())
+	root := append([]byte(nil), hasher.GetHash().RawHash...)
+
+	cert := &InclusionCert{}
+	certBytes, err := cert.MarshalBinary()
+	require.NoError(t, err)
+	ucBytes, err := types.Cbor.Marshal(types.UnicityCertificate{
+		InputRecord: &types.InputRecord{Hash: root},
+	})
+	require.NoError(t, err)
+
+	proof := &InclusionProofV2{
+		CertificationData: &CertificationData{
+			TransactionHash: proofTxHash,
+		},
+		CertificateBytes:   certBytes,
+		UnicityCertificate: ucBytes,
+	}
+
+	err = proof.Verify(req)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "proof certification data transaction hash does not match")
+}
+
+// TestInclusionProofV2Verify_RejectsInvalidUCInputRecordHash confirms that
+// v2 requires UC.IR.h to be exactly 32 bytes.
+func TestInclusionProofV2Verify_RejectsInvalidUCInputRecordHash(t *testing.T) {
 	stateID := RequireNewImprintV2("1111111111111111111111111111111111111111111111111111111111111111")
 	txHash := RequireNewImprintV2("2222222222222222222222222222222222222222222222222222222222222222")
 	req := &CertificationRequest{
@@ -128,7 +220,6 @@ func TestInclusionProofV2Verify_RejectsLegacyImprintUC(t *testing.T) {
 		},
 	}
 
-	// 34 bytes: 2-byte legacy algorithm prefix + 32-byte root.
 	legacyRoot := make([]byte, SiblingSize+2)
 
 	cert := &InclusionCert{}

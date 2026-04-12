@@ -191,10 +191,8 @@ func (pas *ParentAggregatorService) GetShardProof(ctx context.Context, req *api.
 
 	var unicityCertificate api.HexBytes
 	if proofPath != nil {
-		// Blocks are stored under the raw 32-byte SMT root (matching
-		// UC.IR.h). The merkleTreePath.Root wire string still carries
-		// the algorithm-prefixed imprint for back-compat, so look up
-		// by the raw form directly from the parent SMT.
+		// Blocks are stored under the raw 32-byte SMT root matching
+		// UC.IR.h, so look up the block by the raw root hash.
 		rootHash := api.HexBytes(pas.parentRoundManager.GetSMT().GetRootHashRaw())
 		block, err := pas.storage.BlockStorage().GetLatestByRootHash(ctx, rootHash)
 		if err != nil {

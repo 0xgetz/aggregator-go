@@ -108,9 +108,8 @@ func TestMerkleTreePathVerify(t *testing.T) {
 	t.Run("LargePaths", func(t *testing.T) {
 		tree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
-		// These fixtures were captured before the 256-bit tree-key cutover and still
-		// use the old 272-bit sentinel-prefixed path form. Normalize them to the
-		// current 256-bit path representation first.
+		// Normalize these captured path fixtures to the current 256-bit path
+		// representation before inserting them into the tree.
 		mintPath := normalizeLegacyPath(t, "7588607046638288532898314259371162887598150843702815116345200719347816808430746270")
 		transferPath := normalizeLegacyPath(t, "7588595804959218369815512972651793411311840553453637142956782535261123804631684864")
 
@@ -230,10 +229,10 @@ func TestMerkleTreePathVerify(t *testing.T) {
 	})
 
 	t.Run("RealStateIDs", func(t *testing.T) {
-		// Test with actual stateID format (34-byte with algorithm prefix)
+		// Test with concrete stateId values.
 		tree := smt.NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
-		// Create stateIDs with proper format
+		// Create stateIds
 		stateID1 := "00007d535ade796772c5088b095e79a18e282437ee8d8238f5aa9d9c61694948ba9e"
 		stateID2 := "00006478ca42f6949cfbd4b9e4a41b9a384ea78261c1776808da70cf21e98c345700"
 

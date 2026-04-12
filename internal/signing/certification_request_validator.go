@@ -139,8 +139,7 @@ func (v *CertificationRequestValidator) Validate(commitment *models.Certificatio
 	if len(transactionHash) != 32 {
 		return ValidationResult{
 			Status: ValidationStatusInvalidTransactionHashFormat,
-			Error: fmt.Errorf("transaction hash imprint must have at least 3 bytes (2 algorithm + 1 data), "+
-				"got %d", len(transactionHash)),
+			Error:  fmt.Errorf("transaction hash must be exactly 32 bytes, got %d", len(transactionHash)),
 		}
 	}
 

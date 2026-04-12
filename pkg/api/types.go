@@ -109,7 +109,7 @@ type GetInclusionProofResponseV2 struct {
 	InclusionProof *InclusionProofV2 `json:"inclusionProof"`
 }
 
-// InclusionProofV2 is the canonical Yellowpaper v2 inclusion proof payload.
+// InclusionProofV2 is the canonical v2 inclusion proof payload.
 //
 // Wire form (CBOR toarray):
 //
@@ -270,12 +270,11 @@ func (c *GetInclusionProofResponseV2) UnmarshalJSON(data []byte) error {
 }
 
 // InclusionProofV2HashAlgorithm is the SMT hash algorithm locked in by the
-// v2 inclusion proof wire contract. v2 is a clean-slate cutover and is
-// fixed to SHA-256; switching to SHA-3-256 would require a coordinated
-// version bump across aggregator-go, rugregator, and the client SDKs.
+// v2 inclusion proof wire contract. It is fixed to SHA-256; changing it
+// requires a format version bump.
 const InclusionProofV2HashAlgorithm = SHA256
 
-// Verify checks a Yellowpaper v2 inclusion proof against the outer
+// Verify checks a v2 inclusion proof against the outer
 // CertificationRequest. The expected SMT root is sourced exclusively from
 // UC.IR.h (strictly 32 raw bytes); CertificateBytes never carries a root.
 // Non-inclusion proofs short-circuit with ErrExclusionNotImpl — v2
@@ -289,6 +288,15 @@ func (p *InclusionProofV2) Verify(v2 *CertificationRequest) error {
 	}
 	if p.CertificationData == nil {
 		return ErrExclusionNotImpl
+	}
+	if len(v2.CertificationData.TransactionHash) == 0 {
+		return errors.New("missing certification request transaction hash")
+	}
+	if !bytes.Equal(
+		p.CertificationData.TransactionHash.DataBytes(),
+		v2.CertificationData.TransactionHash.DataBytes(),
+	) {
+		return errors.New("proof certification data transaction hash does not match certification request transaction hash")
 	}
 
 	rootRaw, err := p.UCInputRecordHashRaw()
@@ -310,8 +318,7 @@ func (p *InclusionProofV2) Verify(v2 *CertificationRequest) error {
 }
 
 // UCInputRecordHashRaw decodes the embedded Unicity Certificate and
-// returns UC.IR.h as a raw 32-byte hash. v2 is a strict cutover: any
-// other length is rejected (no legacy 2-byte-prefix tolerance).
+// returns UC.IR.h as a raw 32-byte hash. Any other length is rejected.
 func (p *InclusionProofV2) UCInputRecordHashRaw() ([]byte, error) {
 	if len(p.UnicityCertificate) == 0 {
 		return nil, errors.New("missing unicity certificate")

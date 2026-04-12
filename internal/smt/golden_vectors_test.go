@@ -11,7 +11,7 @@ import (
 	"github.com/unicitynetwork/aggregator-go/pkg/api"
 )
 
-func TestRugVector_RootMatches(t *testing.T) {
+func TestGoldenVector_RootMatches(t *testing.T) {
 	tree := NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
 	k1 := mustPathFromKeyHex(t, "0100000000000000000000000000000000000000000000000000000000000000")
@@ -20,12 +20,11 @@ func TestRugVector_RootMatches(t *testing.T) {
 	require.NoError(t, tree.AddLeaf(k1, []byte("value-one")))
 	require.NoError(t, tree.AddLeaf(k2, []byte("value-two")))
 
-	// Generated from rugregator (rsmt).
 	const expectedRoot = "000020563433422d651813394a07697b9c09f9c2ab2ddb95eaa8ed2dc3211de3e869"
 	require.Equal(t, expectedRoot, tree.GetRootHashHex())
 }
 
-func TestRugVector_ProofBitmapAndSiblingsMatch(t *testing.T) {
+func TestGoldenVector_ProofBitmapAndSiblingsMatch(t *testing.T) {
 	tree := NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
 	k1 := mustPathFromKeyHex(t, "0100000000000000000000000000000000000000000000000000000000000000")
@@ -40,7 +39,6 @@ func TestRugVector_ProofBitmapAndSiblingsMatch(t *testing.T) {
 	require.NoError(t, tree.AddLeaf(k2, v2))
 	require.NoError(t, tree.AddLeaf(k3, v3))
 
-	// Generated from rugregator (rsmt).
 	const expectedRoot = "0000b08cae8f98a168a4b39dced99fc3ea2833291c8c53a0eb447e0056044dee598a"
 	require.Equal(t, expectedRoot, tree.GetRootHashHex())
 
@@ -54,7 +52,7 @@ func TestRugVector_ProofBitmapAndSiblingsMatch(t *testing.T) {
 	require.True(t, vr.PathIncluded)
 	require.True(t, vr.Result)
 
-	bitmap, siblings, err := legacyPathToBitmapAndSiblings(path, k2.BitLen()-1)
+	bitmap, siblings, err := pathToBitmapAndSiblings(path, k2.BitLen()-1)
 	require.NoError(t, err)
 
 	const expectedBitmap = "0300000000000000000000000000000000000000000000000000000000000000"
@@ -70,7 +68,7 @@ func TestRugVector_ProofBitmapAndSiblingsMatch(t *testing.T) {
 	}
 }
 
-func legacyPathToBitmapAndSiblings(path *api.MerkleTreePath, fullKeyBits int) ([32]byte, [][]byte, error) {
+func pathToBitmapAndSiblings(path *api.MerkleTreePath, fullKeyBits int) ([32]byte, [][]byte, error) {
 	var bitmap [32]byte
 	if path == nil {
 		return bitmap, nil, fmt.Errorf("nil path")

@@ -170,7 +170,7 @@ func GenerateDocsHTML() string {
         <div class="method-section">
             <div class="method-header">certification_request</div>
             <div class="method-content">
-                <div class="description">Submit a state transition certification request to the aggregator. The example below uses a real secp256k1 signature that will pass validation. Note: All hash fields (stateId, transactionHash, sourceStateHash) start with "0000" (SHA256 algorithm prefix).</div>
+                <div class="description">Submit a state transition certification request to the aggregator. The example below uses a real secp256k1 signature that will pass validation. In the v2 wire format, stateId, transactionHash, and sourceStateHash are raw 32-byte SHA-256 values with no algorithm-prefix bytes.</div>
                 
                 <div class="params-container">
                     <div class="params-section">
@@ -191,28 +191,28 @@ func GenerateDocsHTML() string {
             </div>
         </div>
 
-        <!-- get_inclusion_proof -->
+        <!-- get_inclusion_proof.v2 -->
         <div class="method-section">
-            <div class="method-header">get_inclusion_proof</div>
+            <div class="method-header">get_inclusion_proof.v2</div>
             <div class="method-content">
-                <div class="description">Retrieve the inclusion proof for a submitted certification request.</div>
+                <div class="description">Retrieve the v2 inclusion proof for a submitted certification request. The stateId must be the raw 32-byte key used in the aggregation tree.</div>
                 
                 <div class="params-container">
                     <div class="params-section">
                         <h3>Request Parameters</h3>
-                        <textarea id="get_inclusion_proof_params">{
-  "stateId": "0000c7aa6962316c0eeb1469dc3d7793e39e140c005e6eea0e188dcc73035d765937"
+                        <textarea id="get_inclusion_proof.v2_params">{
+  "stateId": "32bbbc306e3a101e8fa1e4349631864957c7d84167238c85cba972943ce05ccd"
 }</textarea>
                         <div class="button-group">
-                            <button onclick="sendRequest('get_inclusion_proof')">🚀 Send Request</button>
-                            <button onclick="clearResponse('get_inclusion_proof')">🗑️ Clear</button>
-                            <button onclick="copyAsCurl('get_inclusion_proof')">📋 Copy cURL</button>
+                            <button onclick="sendRequest('get_inclusion_proof.v2')">🚀 Send Request</button>
+                            <button onclick="clearResponse('get_inclusion_proof.v2')">🗑️ Clear</button>
+                            <button onclick="copyAsCurl('get_inclusion_proof.v2')">📋 Copy cURL</button>
                         </div>
                     </div>
                     
                     <div class="response-section">
-                        <h3>Response <span id="get_inclusion_proof_status" class="status"></span></h3>
-                        <div id="get_inclusion_proof_response" class="response-box">Click "Send Request" to see the response here...</div>
+                        <h3>Response <span id="get_inclusion_proof.v2_status" class="status"></span></h3>
+                        <div id="get_inclusion_proof.v2_response" class="response-box">Click "Send Request" to see the response here...</div>
                     </div>
                 </div>
             </div>

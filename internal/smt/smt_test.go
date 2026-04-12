@@ -32,7 +32,7 @@ func normalizeLegacyPath(t *testing.T, raw string) *big.Int {
 
 // TestSMTGetRoot test basic SMT root hash computation
 func TestSMTGetRoot(t *testing.T) {
-	// Yellowpaper-aligned reference values for basic tree shapes.
+	// v2 reference values for basic tree shapes.
 	t.Run("EmptyTree", func(t *testing.T) {
 		smt := NewSparseMerkleTree(api.SHA256, 2)
 		expected := "000047dc540c94ceb704a23875c11273e16bb0b8a87aed84de911f2133568115f254"

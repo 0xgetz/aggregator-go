@@ -8,7 +8,7 @@ import (
 	"github.com/unicitynetwork/bft-go-base/types"
 )
 
-// ImprintV2 is the unified type for both V1 (imprints with algorithm prefix) and V2 (raw bytes)
+// ImprintV2 stores hash-like identifiers used by the public API.
 type ImprintV2 HexBytes
 
 type StateID = ImprintV2
@@ -17,7 +17,7 @@ type TransactionHash = ImprintV2
 type RequestID = ImprintV2
 
 const (
-	// StateTreeKeyLengthBits is the Yellowpaper SMT key size.
+	// StateTreeKeyLengthBits is the v2 SMT key size.
 	// The key is the raw 32-byte hash value (no per-key algorithm prefix).
 	StateTreeKeyLengthBits  = 256
 	StateTreeKeyLengthBytes = StateTreeKeyLengthBits / 8
@@ -68,7 +68,7 @@ func (r ImprintV2) GetTreeKey() ([]byte, error) {
 }
 
 // PathToFixedBytes converts a sentinel-prefixed SMT path into fixed-width key bytes.
-// Byte order follows Yellowpaper/rugregator SMT semantics:
+// Byte order follows the v2 SMT bit layout:
 // key bit d is bit (d%8) of key[d/8] (LSB-first across bytes).
 func PathToFixedBytes(path *big.Int, keyLengthBits int) ([]byte, error) {
 	if keyLengthBits <= 0 {

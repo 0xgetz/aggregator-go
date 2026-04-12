@@ -90,7 +90,7 @@ func (ts *ThreadSafeSMT) GetRootHashRaw() []byte {
 	return ts.smt.GetRootHashRaw()
 }
 
-// GetInclusionCert builds a Yellowpaper inclusion certificate for the leaf
+// GetInclusionCert builds a v2 inclusion certificate for the leaf
 // at the given raw 32-byte key. This is a read operation and allows
 // concurrent access.
 func (ts *ThreadSafeSMT) GetInclusionCert(key []byte) (*api.InclusionCert, error) {

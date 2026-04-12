@@ -26,7 +26,7 @@ func TestDocumentationExamplePayload(t *testing.T) {
 	err = types.Cbor.Unmarshal(exampleJSON, &certRequest)
 	require.NoError(t, err, "Failed to parse example CBOR")
 
-	// Verify DataHash imprint format (should start with 0000 for SHA256)
+	// Verify the example uses raw 32-byte hashes.
 	certData := certRequest.CertificationData
 	require.Equal(t, len(certData.SourceStateHash.Imprint()), 32, "State hash should be 32 bytes")
 	require.GreaterOrEqual(t, len(certData.TransactionHash.Imprint()), 32, "Transaction hash should be 32 bytes")

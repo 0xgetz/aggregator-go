@@ -309,7 +309,7 @@ func (l *LeafBranch) calculateHash(hasher *api.DataHasher) []byte {
 		l.hashSet = true
 		return l.rawHash[:]
 	}
-	// Yellowpaper-style leaf hashing with domain separation:
+	// v2 leaf hashing with domain separation:
 	// H(0x00 || key || value)
 	hasher.Reset().
 		AddData([]byte{0x00}).
@@ -370,7 +370,7 @@ func (n *NodeBranch) calculateHash(hasher *api.DataHasher) []byte {
 		rightHash = n.Right.calculateHash(hasher)
 	}
 
-	// Yellowpaper semantics for unary nodes: hash is child hash.
+	// v2 SMT semantics for unary nodes: hash is child hash.
 	if leftHash == nil && rightHash != nil {
 		copy(n.rawHash[:], rightHash)
 		n.hashSet = true
@@ -510,7 +510,7 @@ func (smt *SparseMerkleTree) GetRootHashHex() string {
 }
 
 // GetRootHashRaw returns the raw 32-byte root hash without the algorithm
-// prefix. This is the canonical Yellowpaper root hash consumed by
+// prefix. This is the canonical v2 root hash consumed by
 // api.InclusionCert verification and by UC.IR.h binding.
 func (smt *SparseMerkleTree) GetRootHashRaw() []byte {
 	hasher := api.NewDataHasher(smt.algorithm)
@@ -520,9 +520,9 @@ func (smt *SparseMerkleTree) GetRootHashRaw() []byte {
 	return out
 }
 
-// GetInclusionCert builds a Yellowpaper inclusion certificate for the leaf
-// at the given raw 32-byte key. Verifier consumes bitmap + siblings in
-// root-to-leaf wire order; see docs/inclusion-proof-wire.md.
+// GetInclusionCert builds a v2 inclusion certificate for the leaf at the
+// given raw 32-byte key. Verifier consumes bitmap + siblings in root-to-leaf
+// wire order.
 //
 // Returns an error if no leaf exists at the key. Non-inclusion certificates
 // are produced by a separate path (not yet implemented).
@@ -588,8 +588,8 @@ func (smt *SparseMerkleTree) generateInclusionCert(hasher *api.DataHasher, key [
 	}
 
 	// Unary passthrough: typically only at the root when the tree holds
-	// ≤1 leaves. The Yellowpaper rule says a single-child node's hash
-	// equals the child's hash, so no bitmap bit and no sibling are added.
+	// ≤1 leaves. The v2 rule says a single-child node's hash equals the
+	// child's hash, so no bitmap bit and no sibling are added.
 	if node.Left != nil {
 		return smt.generateInclusionCert(hasher, key, node.Left, cert)
 	}
@@ -600,7 +600,7 @@ func (smt *SparseMerkleTree) generateInclusionCert(hasher *api.DataHasher, key [
 }
 
 // keyBit returns bit d of the raw key under LSB-first byte layout.
-// Matches api.keyBitAt and rugregator's key_bit_at.
+// Matches api.keyBitAt.
 func keyBit(key []byte, d int) byte {
 	return (key[d/8] >> (uint(d) % 8)) & 1
 }
@@ -647,7 +647,7 @@ func (smt *SparseMerkleTree) findLeafInBranch(branch branch, targetPath *big.Int
 }
 
 // buildTree updates a subtree while preserving the leaf full key bytes and
-// tracking absolute node depth (0..255) for Yellowpaper node hashing.
+// tracking absolute node depth (0..255) for v2 node hashing.
 func (smt *SparseMerkleTree) buildTree(branch branch, remainingPath *big.Int, leafKey, value []byte, depthOffset int) (branch, error) {
 	// Special checks for adding a leaf that already exists in the tree
 	if branch.isLeaf() && branch.getPath().Cmp(remainingPath) == 0 {

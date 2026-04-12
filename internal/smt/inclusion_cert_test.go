@@ -70,11 +70,11 @@ func TestGetInclusionCert_TwoLeaves(t *testing.T) {
 	require.NoError(t, certB.Verify(keyB, valB, root, api.SHA256))
 }
 
-// TestGetInclusionCert_RugVector cross-checks the Go inclusion cert
-// generator against the frozen rugregator golden vector already used by
-// rug_vectors_test.go. The same three keys, values and root must produce
+// TestGetInclusionCert_GoldenVector cross-checks the Go inclusion cert
+// generator against the frozen golden vector already used by
+// golden_vectors_test.go. The same three keys, values and root must produce
 // the same bitmap and sibling list under the new wire format.
-func TestGetInclusionCert_RugVector(t *testing.T) {
+func TestGetInclusionCert_GoldenVector(t *testing.T) {
 	tree := NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 
 	k1 := mustHex(t, "0100000000000000000000000000000000000000000000000000000000000000")
@@ -97,7 +97,7 @@ func TestGetInclusionCert_RugVector(t *testing.T) {
 
 	const expectedBitmap = "0300000000000000000000000000000000000000000000000000000000000000"
 	require.Equal(t, expectedBitmap, hex.EncodeToString(cert.Bitmap[:]),
-		"cert bitmap must match rugregator golden vector")
+		"cert bitmap must match golden vector")
 
 	expectedSiblings := []string{
 		"4a67e1a8224ab28c6a641ea0a66def8366990856d3b6c6176319c66062821ea6",
@@ -106,7 +106,7 @@ func TestGetInclusionCert_RugVector(t *testing.T) {
 	require.Len(t, cert.Siblings, len(expectedSiblings))
 	for i, sib := range cert.Siblings {
 		require.Equal(t, expectedSiblings[i], hex.EncodeToString(sib[:]),
-			"sibling %d must match rugregator golden vector", i)
+			"sibling %d must match golden vector", i)
 	}
 
 	root := tree.GetRootHashRaw()
@@ -268,8 +268,7 @@ func TestGetInclusionCert_WrongKeyLength(t *testing.T) {
 }
 
 // TestGetRootHashRaw_MatchesHex confirms that GetRootHashRaw produces
-// exactly the 32 bytes that follow the 2-byte algorithm prefix inside
-// GetRootHashHex.
+// the 32-byte hash portion of GetRootHashHex.
 func TestGetRootHashRaw_MatchesHex(t *testing.T) {
 	tree := NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits)
 	addLeaf(t, tree,
@@ -283,7 +282,7 @@ func TestGetRootHashRaw_MatchesHex(t *testing.T) {
 	require.Len(t, rawHex, 64, "raw root must be 32 bytes hex-encoded")
 
 	fullHex := tree.GetRootHashHex()
-	require.Equal(t, "0000"+rawHex, fullHex, "raw root must equal imprint minus 2-byte algo prefix")
+	require.Equal(t, "0000"+rawHex, fullHex, "raw root must match the hash portion of the hex root")
 }
 
 // addLeaf is a small helper that converts a 32-byte key to its path form
@@ -315,4 +314,3 @@ func bits8(x byte) int {
 	}
 	return n
 }
-

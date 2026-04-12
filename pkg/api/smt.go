@@ -101,7 +101,7 @@ func (m *MerkleTreePath) Verify(stateID *big.Int) (*PathVerificationResult, erro
 		if i == 0 {
 			if stepPath.BitLen() >= 2 {
 				// First step, normal case: data is the value in the leaf, apply
-				// Yellowpaper-style leaf hashing rule H(0x00 || key || value).
+				// the current SMT leaf hashing rule H(0x00 || key || value).
 				hasher.Reset().AddData([]byte{0x00}).AddData(leafKey)
 				if stepBytes != nil {
 					hasher.AddData(*stepBytes)
@@ -126,7 +126,7 @@ func (m *MerkleTreePath) Verify(stateID *big.Int) (*PathVerificationResult, erro
 				right = currentData
 			}
 
-			// Yellowpaper semantics for unary nodes: hash is child hash.
+			// Under the current SMT hashing rules, a unary node hash is the child hash.
 			if left == nil && right != nil {
 				currentData = right
 			} else if right == nil && left != nil {

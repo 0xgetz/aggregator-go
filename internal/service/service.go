@@ -168,7 +168,7 @@ func NewAggregatorService(cfg *config.Config,
 		leaderSelector:                leaderSelector,
 		commitmentValidator:           signingV1.NewCommitmentValidator(cfg.Sharding),
 		certificationRequestValidator: signing.NewCertificationRequestValidator(cfg.Sharding),
-		trustBaseValidator:  		   trustbase.NewTrustBaseValidator(storage.TrustBaseStorage()),
+		trustBaseValidator:            trustbase.NewTrustBaseValidator(storage.TrustBaseStorage()),
 		receiptSigner:                 receiptSigner,
 	}
 }
@@ -350,9 +350,7 @@ func (as *AggregatorService) GetInclusionProofV1(ctx context.Context, req *api.G
 	}
 
 	// Find the latest block that matches the current SMT root hash. Blocks
-	// are stored with the raw 32-byte root (matching UC.IR.h); the V1 wire
-	// MerkleTreePath.Root still carries the algorithm-prefixed imprint for
-	// back-compat, so we look up by the raw form directly from the SMT.
+	// are stored under the raw 32-byte root matching UC.IR.h.
 	rootHash := api.HexBytes(smtInstance.GetRootHashRaw())
 	block, err := as.storage.BlockStorage().GetLatestByRootHash(ctx, rootHash)
 	if err != nil {
@@ -405,12 +403,9 @@ func (as *AggregatorService) GetInclusionProofV1(ctx context.Context, req *api.G
 	}, nil
 }
 
-// GetInclusionProofV2 retrieves a Yellowpaper v2 inclusion proof for the
-// given stateId. In standalone mode it returns a new-wire InclusionCert
-// bound to the current SMT root (via UC.IR.h). Child mode is temporarily
-// unsupported — the v2 wire format does not yet carry joined parent/child
-// proofs, so we surface a clear error until exclusion + child joining are
-// reimplemented.
+// GetInclusionProofV2 retrieves a v2 inclusion proof for the given stateId.
+// In standalone mode it returns an InclusionCert bound to the current SMT
+// root via UC.IR.h. Child mode is not implemented yet.
 func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.GetInclusionProofRequestV2) (*api.GetInclusionProofResponseV2, error) {
 	unlock := as.roundManager.FinalizationReadLock()
 	defer unlock()
@@ -419,7 +414,7 @@ func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.G
 		return nil, fmt.Errorf("state ID validation failed: %w", err)
 	}
 
-	// Strict v2: stateId is raw 32 bytes, no legacy 2-byte algorithm prefix.
+	// v2 stateId must be exactly 32 bytes.
 	if len(req.StateID) != api.StateTreeKeyLengthBytes {
 		return nil, fmt.Errorf("invalid state ID length: expected %d bytes (v2 wire format), got %d",
 			api.StateTreeKeyLengthBytes, len(req.StateID))
@@ -457,10 +452,8 @@ func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.G
 		return nil, fmt.Errorf("failed to get aggregator record: %w", err)
 	}
 	if record == nil || record.BlockNumber.Cmp(block.Index.Int) > 0 {
-		// Non-inclusion: the v2 ExclusionCert wire path is not yet
-		// implemented in Go. Return an empty-cert payload with
-		// CertificationData == nil so that verifiers short-circuit with
-		// ErrExclusionNotImpl rather than attempting to decode nothing.
+		// Non-inclusion is not implemented yet. Return an empty v2 proof
+		// payload so verifiers short-circuit with ErrExclusionNotImpl.
 		return &api.GetInclusionProofResponseV2{
 			BlockNumber: block.Index.Uint64(),
 			InclusionProof: &api.InclusionProofV2{
@@ -484,7 +477,10 @@ func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.G
 	}
 
 	return &api.GetInclusionProofResponseV2{
-		BlockNumber: record.BlockNumber.Uint64(),
+		// BlockNumber must describe the returned proof bundle
+		// (CertificateBytes + UnicityCertificate), which is bound to the
+		// current SMT root looked up above.
+		BlockNumber: block.Index.Uint64(),
 		InclusionProof: &api.InclusionProofV2{
 			CertificationData:  record.CertificationData.ToAPI(),
 			CertificateBytes:   certBytes,

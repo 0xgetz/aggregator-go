@@ -13,7 +13,7 @@ func TestFixedBytesToPath_UsesLSBFirstBitAddressing(t *testing.T) {
 	path, err := FixedBytesToPath(key, StateTreeKeyLengthBits)
 	require.NoError(t, err)
 
-	// Yellowpaper/rugregator semantics: depth 0 is bit 0 of byte 0.
+	// v2 SMT semantics: depth 0 is bit 0 of byte 0.
 	require.Equal(t, uint(1), path.Bit(0))
 	require.Equal(t, uint(0), path.Bit(248))
 }

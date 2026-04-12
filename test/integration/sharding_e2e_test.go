@@ -32,11 +32,9 @@ import (
 // TestShardingE2E tests the full sharding flow: parent + 2 child shards
 // submitting commitments and verifying inclusion proofs.
 func TestShardingE2E(t *testing.T) {
-	// Child-mode v2 inclusion proof path is temporarily stubbed as part of
-	// the Yellowpaper wire cutover — joined parent/child InclusionCert
-	// generation has not been reimplemented yet. Re-enable this test once
-	// child mode inclusion_proof_v2 is migrated.
-	t.Skip("child-mode inclusion_proof_v2 not yet migrated after wire cutover")
+	// Child-mode v2 inclusion proof generation has not been reimplemented
+	// yet. Re-enable this test once child mode inclusion_proof_v2 is migrated.
+	t.Skip("child-mode inclusion_proof_v2 not yet migrated")
 	ctx := t.Context()
 
 	// Start containers (shared MongoDB with different databases per aggregator)

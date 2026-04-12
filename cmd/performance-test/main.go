@@ -253,7 +253,7 @@ func generateCommitmentRequest() *api.CertificationRequest {
 	publicKeyBytes := privateKey.PubKey().SerializeCompressed()
 	ownerPredicate := api.NewPayToPublicKeyPredicate(publicKeyBytes)
 
-	// Generate random state data and create DataHash imprint
+	// Generate random state data and hash it.
 	stateData := make([]byte, 32)
 	rand.Read(stateData)
 	sourceStateHashImprint := signing.CreateDataHash(stateData)
@@ -289,7 +289,7 @@ func generateCommitmentRequest() *api.CertificationRequest {
 		sourceStateHashImprint = signing.CreateDataHash(stateData)
 	}
 
-	// Generate random transaction data and create DataHash imprint
+	// Generate random transaction data and hash it.
 	transactionData := make([]byte, 32)
 	rand.Read(transactionData)
 	transactionHashImprint := signing.CreateDataHash(transactionData)
@@ -392,8 +392,8 @@ func commitmentWorker(ctx context.Context, shardClients []*ShardClient, metrics 
 				}
 
 				switch submitResp.Status {
-				case "SUCCESS", "REQUEST_ID_EXISTS":
-					if submitResp.Status == "REQUEST_ID_EXISTS" {
+				case "SUCCESS", "STATE_ID_EXISTS":
+					if submitResp.Status == "STATE_ID_EXISTS" {
 						atomic.AddInt64(&metrics.requestIdExistsErr, 1)
 						if sm := metrics.shard(shardIdx); sm != nil {
 							sm.requestIdExistsErr.Add(1)
@@ -534,7 +534,7 @@ func proofVerificationWorker(ctx context.Context, shardClients []*ShardClient, m
 					}
 					metrics.addProofLatency(totalLatency)
 
-					// TODO(v2-cutover): Wire new api.InclusionProofV2.Verify(*CertificationRequest)
+					// TODO: Wire api.InclusionProofV2.Verify(*CertificationRequest)
 					// verification here. For now we only check that the response carries a
 					// non-empty inclusion cert; perf tests care about throughput, not
 					// cryptographic verification correctness.

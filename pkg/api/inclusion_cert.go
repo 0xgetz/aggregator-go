@@ -35,7 +35,7 @@ var (
 	ErrExclusionNotImpl     = errors.New("exclusion cert: verification not yet implemented")
 )
 
-// InclusionCert is the decoded Yellowpaper inclusion certificate.
+// InclusionCert is the decoded v2 inclusion certificate.
 //
 // Wire format (raw binary, no framing):
 //
@@ -96,7 +96,7 @@ func (c *InclusionCert) UnmarshalBinary(data []byte) error {
 // algorithm.
 //
 // Parameters:
-//   - key:          32-byte SMT key (no algorithm prefix), LSB-first layout.
+//   - key:          32-byte SMT key, LSB-first layout.
 //   - value:        raw leaf value bytes (v2 inclusion proofs use the tx hash).
 //   - expectedRoot: raw 32-byte root hash, taken from UC.IR.h.
 //   - algo:         hash algorithm used by the SMT.
@@ -152,7 +152,7 @@ func (c *InclusionCert) Verify(key, value, expectedRoot []byte, algo HashAlgorit
 	return nil
 }
 
-// ExclusionCert is the decoded Yellowpaper non-inclusion certificate.
+// ExclusionCert is the decoded v2 non-inclusion certificate.
 //
 // Wire format (raw binary, no framing):
 //
@@ -228,7 +228,7 @@ func bitmapPopcount(b *[BitmapSize]byte) int {
 
 // keyBitAt returns bit d of key under LSB-first byte layout:
 // bit d is bit (d mod 8) of key[d / 8]. Matches PathToFixedBytes /
-// FixedBytesToPath in state_id.go and rugregator's key_bit_at.
+// FixedBytesToPath in state_id.go.
 func keyBitAt(key []byte, d int) byte {
 	return (key[d/8] >> (uint(d) % 8)) & 1
 }
