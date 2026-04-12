@@ -1,6 +1,7 @@
 package smt
 
 import (
+	"bytes"
 	"math/big"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestThreadSafeSMT_AddPreHashedLeaf_StoresChildRoot(t *testing.T) {
 	tree := NewThreadSafeSMT(NewParentSparseMerkleTree(api.SHA256, 2))
 
 	path := big.NewInt(4) // shard ID with sentinel bit for a 2-bit parent tree
-	hash := bytesOf(0xab, 32)
+	hash := bytes.Repeat([]byte{0xab}, 32)
 
 	require.NoError(t, tree.AddPreHashedLeaf(path, hash))
 
