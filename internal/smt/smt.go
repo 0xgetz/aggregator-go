@@ -74,7 +74,7 @@ func NewSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int) *SparseMerk
 		panic(fmt.Sprintf("smt: hash algorithm output (%d bytes) exceeds inline cache size (%d) — update smtCachedHashBytes",
 			hashLen(algorithm), smtCachedHashBytes))
 	}
-	return &SparseMerkleTree{
+	tree := &SparseMerkleTree{
 		parentMode: false,
 		keyLength:  keyLength,
 		algorithm:  algorithm,
@@ -82,6 +82,9 @@ func NewSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int) *SparseMerk
 		isSnapshot: false,
 		original:   nil,
 	}
+	// Prime the root hash to eliminate races on the first concurrent reads
+	tree.root.calculateHash(api.NewDataHasher(algorithm))
+	return tree
 }
 
 // NewChildSparseMerkleTree creates a new sparse Merkle tree for a child aggregator in sharded setup
@@ -100,7 +103,7 @@ func NewChildSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int, shardI
 	if path.BitLen() > keyLength {
 		panic("Shard ID must be shorter than SMT key length")
 	}
-	return &SparseMerkleTree{
+	tree := &SparseMerkleTree{
 		parentMode: false,
 		keyLength:  keyLength,
 		algorithm:  algorithm,
@@ -108,6 +111,9 @@ func NewChildSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int, shardI
 		isSnapshot: false,
 		original:   nil,
 	}
+	// Prime the root hash to eliminate races on the first concurrent reads
+	tree.root.calculateHash(api.NewDataHasher(algorithm))
+	return tree
 }
 
 // NewParentSparseMerkleTree creates a new sparse Merkle tree for the parent aggregator in sharded setup
@@ -126,6 +132,11 @@ func NewParentSparseMerkleTree(algorithm api.HashAlgorithm, keyLength int) *Spar
 	// the tree and the corresponding inclusion proofs would fail to verify
 	tree.root.Left = populate(0b10, keyLength, 1)
 	tree.root.Right = populate(0b11, keyLength, 1)
+
+	// Mutation above invalidated the root hash primed by NewSparseMerkleTree.
+	// We reset and re-prime.
+	tree.root.hashSet = false
+	tree.root.calculateHash(api.NewDataHasher(algorithm))
 
 	return tree
 }
@@ -334,25 +345,29 @@ func newNodeBranch(path *big.Int, left, right branch) *NodeBranch {
 }
 
 func newNodeBranchWithDepth(path *big.Int, left, right branch, depth int) *NodeBranch {
+	if depth < 0 || depth > 255 {
+		panic(fmt.Sprintf("smt: node depth %d out of uint8 range [0, 255]", depth))
+	}
 	return &NodeBranch{
 		Path:   new(big.Int).Set(path),
 		Depth:  uint8(depth),
 		Left:   left,
 		Right:  right,
 		isRoot: false,
-		// Hash will be computed on demand
 	}
 }
 
-// NewRootBranch creates a root node branch
+// newRootBranch creates a root node branch
 func newRootBranch(path *big.Int, left, right branch, depth int) *NodeBranch {
+	if depth < 0 || depth > 255 {
+		panic(fmt.Sprintf("smt: root depth %d out of uint8 range [0, 255]", depth))
+	}
 	return &NodeBranch{
 		Path:   new(big.Int).Set(path),
 		Depth:  uint8(depth),
 		Left:   left,
 		Right:  right,
 		isRoot: true,
-		// Hash will be computed on demand
 	}
 }
 
@@ -493,6 +508,14 @@ func (smt *SparseMerkleTree) AddLeaves(leaves []*Leaf) error {
 	}
 
 	return nil
+}
+
+// ensureHashes eagerly computes all node hashes in the tree. Must be called
+// under a write lock so that subsequent readers under RLock find every
+// hashSet flag already true and never mutate node state.
+func (smt *SparseMerkleTree) ensureHashes() {
+	hasher := api.NewDataHasher(smt.algorithm)
+	smt.root.calculateHash(hasher)
 }
 
 // GetRootHash returns the root hash as imprint

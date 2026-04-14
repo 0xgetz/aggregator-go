@@ -38,5 +38,35 @@ func TestThreadSafeSMT_GetShardInclusionFragment_ReturnsNativeParentFragment(t *
 	require.Equal(t, hash, []byte(fragment.ShardLeafValue))
 	require.GreaterOrEqual(t, len(fragment.CertificateBytes), api.BitmapSize)
 	require.Equal(t, 0, len(fragment.CertificateBytes)%api.SiblingSize)
-	require.NoError(t, fragment.Verify(4, hash, tree.GetRootHashRaw(), api.SHA256))
+	require.NoError(t, fragment.Verify(4, 2, hash, tree.GetRootHashRaw(), api.SHA256))
+}
+
+func TestThreadSafeSMT_PrimesHashesOnConstruction(t *testing.T) {
+	tree := NewThreadSafeSMT(NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
+	requireBranchHashesPrimed(t, tree.smt.root)
+}
+
+func TestThreadSafeSMTSnapshot_PrimesHashesOnConstruction(t *testing.T) {
+	tree := NewThreadSafeSMT(NewSparseMerkleTree(api.SHA256, api.StateTreeKeyLengthBits))
+	snapshot := tree.CreateSnapshot()
+	requireBranchHashesPrimed(t, snapshot.snapshot.root)
+}
+
+func requireBranchHashesPrimed(t *testing.T, b branch) {
+	t.Helper()
+
+	switch node := b.(type) {
+	case *LeafBranch:
+		require.True(t, node.hashSet)
+	case *NodeBranch:
+		require.True(t, node.hashSet)
+		if node.Left != nil {
+			requireBranchHashesPrimed(t, node.Left)
+		}
+		if node.Right != nil {
+			requireBranchHashesPrimed(t, node.Right)
+		}
+	default:
+		require.Failf(t, "unexpected branch type", "%T", b)
+	}
 }

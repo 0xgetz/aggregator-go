@@ -77,7 +77,8 @@ func TestSmtPersistenceAndRestoration(t *testing.T) {
 	require.NoError(t, err, "Should create RoundManager")
 
 	// Test persistence
-	smtNodes := rm.convertLeavesToNodes(testLeaves)
+	smtNodes, err := rm.convertLeavesToNodes(testLeaves)
+	require.NoError(t, err)
 	err = storage.SmtStorage().StoreBatch(ctx, smtNodes)
 	require.NoError(t, err, "Should persist SMT nodes")
 
@@ -148,7 +149,8 @@ func TestLargeSmtRestoration(t *testing.T) {
 	freshHash := freshSmt.GetRootHashRaw()
 
 	// Persist leaves to storage
-	smtNodes := rm.convertLeavesToNodes(testLeaves)
+	smtNodes, err := rm.convertLeavesToNodes(testLeaves)
+	require.NoError(t, err)
 	err = storage.SmtStorage().StoreBatch(ctx, smtNodes)
 	require.NoError(t, err, "Should persist large number of SMT nodes")
 
@@ -318,7 +320,8 @@ func TestSmtRestorationWithBlockVerification(t *testing.T) {
 	require.NoError(t, err, "Should create RoundManager")
 
 	// Persist SMT nodes to storage
-	smtNodes := rm.convertLeavesToNodes(testLeaves)
+	smtNodes, err := rm.convertLeavesToNodes(testLeaves)
+	require.NoError(t, err)
 	err = storage.SmtStorage().StoreBatch(ctx, smtNodes)
 	require.NoError(t, err, "Should persist SMT nodes")
 

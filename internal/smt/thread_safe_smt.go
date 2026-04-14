@@ -17,6 +17,9 @@ type ThreadSafeSMT struct {
 
 // NewThreadSafeSMT creates a new thread-safe SMT wrapper
 func NewThreadSafeSMT(smtInstance *SparseMerkleTree) *ThreadSafeSMT {
+	// Prime hash caches before publishing the wrapper so no later read path
+	// under RLock needs to mutate node state on a freshly constructed tree.
+	smtInstance.ensureHashes()
 	return &ThreadSafeSMT{
 		smt: smtInstance,
 	}
@@ -42,7 +45,11 @@ func (ts *ThreadSafeSMT) AddLeaf(path *big.Int, value []byte) error {
 	ts.rwMux.Lock()
 	defer ts.rwMux.Unlock()
 
-	return ts.smt.AddLeaf(path, value)
+	if err := ts.smt.AddLeaf(path, value); err != nil {
+		return err
+	}
+	ts.smt.ensureHashes()
+	return nil
 }
 
 // AddPreHashedLeaf adds a leaf where the value is already a hash calculated externally
@@ -51,7 +58,11 @@ func (ts *ThreadSafeSMT) AddPreHashedLeaf(path *big.Int, hash []byte) error {
 	ts.rwMux.Lock()
 	defer ts.rwMux.Unlock()
 
-	return ts.smt.AddLeaf(path, hash)
+	if err := ts.smt.AddLeaf(path, hash); err != nil {
+		return err
+	}
+	ts.smt.ensureHashes()
+	return nil
 }
 
 // GetRootHash returns the current root hash
@@ -165,7 +176,11 @@ func (ts *ThreadSafeSMT) WithReadLock(fn func() error) error {
 func (ts *ThreadSafeSMT) WithWriteLock(fn func() error) error {
 	ts.rwMux.Lock()
 	defer ts.rwMux.Unlock()
-	return fn()
+	if err := fn(); err != nil {
+		return err
+	}
+	ts.smt.ensureHashes()
+	return nil
 }
 
 // CreateSnapshot creates a thread-safe snapshot of the current SMT state
