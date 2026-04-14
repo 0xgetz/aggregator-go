@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/unicitynetwork/bft-go-base/types"
 
@@ -171,29 +170,21 @@ func (pas *ParentAggregatorService) GetShardProof(ctx context.Context, req *api.
 
 	pas.logger.WithContext(ctx).Debug("Shard proof requested", "shardId", req.ShardID)
 
-	shardPath := new(big.Int).SetInt64(int64(req.ShardID))
-	merkleTreePath, err := pas.parentRoundManager.GetSMT().GetPath(shardPath)
+	parentFragment, rootHashRaw, err := pas.parentRoundManager.GetSMT().GetShardInclusionFragmentWithRoot(req.ShardID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get merkle tree path: %w", err)
+		return nil, fmt.Errorf("failed to get shard inclusion fragment: %w", err)
 	}
-
-	var proofPath *api.MerkleTreePath
-	if len(merkleTreePath.Steps) > 0 && merkleTreePath.Steps[0].Data != nil {
-		proofPath = merkleTreePath
-		pas.logger.WithContext(ctx).Info("Generated shard proof from current state",
-			"shardId", req.ShardID,
-			"rootHash", merkleTreePath.Root)
-	} else {
-		proofPath = nil
+	if parentFragment == nil {
 		pas.logger.WithContext(ctx).Info("Shard has not submitted root yet, returning nil proof",
 			"shardId", req.ShardID)
 	}
 
 	var unicityCertificate api.HexBytes
-	if proofPath != nil {
+	var blockNumber uint64
+	if parentFragment != nil {
 		// Blocks are stored under the raw 32-byte SMT root matching
 		// UC.IR.h, so look up the block by the raw root hash.
-		rootHash := api.HexBytes(pas.parentRoundManager.GetSMT().GetRootHashRaw())
+		rootHash := api.HexBytes(rootHashRaw)
 		block, err := pas.storage.BlockStorage().GetLatestByRootHash(ctx, rootHash)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get latest block by root hash: %w", err)
@@ -202,11 +193,13 @@ func (pas *ParentAggregatorService) GetShardProof(ctx context.Context, req *api.
 			return nil, fmt.Errorf("no block found with root hash %s", rootHash.String())
 		}
 		unicityCertificate = block.UnicityCertificate
+		blockNumber = block.Index.Uint64()
 	}
 
 	return &api.GetShardProofResponse{
-		MerkleTreePath:     proofPath,
+		ParentFragment:     parentFragment,
 		UnicityCertificate: unicityCertificate,
+		BlockNumber:        blockNumber,
 	}, nil
 }
 

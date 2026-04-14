@@ -121,7 +121,6 @@ func (s *FinalizeDuplicateTestSuite) Test1_DuplicateRecovery() {
 		rootHashBytes,
 		api.HexBytes{},
 		api.HexBytes{},
-		nil,
 	)
 
 	// FinalizeBlock should succeed despite duplicates
@@ -180,7 +179,6 @@ func (s *FinalizeDuplicateTestSuite) Test2_NoDuplicates() {
 		rootHashBytes,
 		api.HexBytes{},
 		api.HexBytes{},
-		nil,
 	)
 
 	// Should succeed on first try (no duplicates)
@@ -245,7 +243,6 @@ func (s *FinalizeDuplicateTestSuite) Test3_AllDuplicates() {
 		rootHashBytes,
 		api.HexBytes{},
 		api.HexBytes{},
-		nil,
 	)
 
 	// Should succeed even when all records are duplicates
@@ -303,7 +300,6 @@ func (s *FinalizeDuplicateTestSuite) Test4_DuplicateBlock() {
 		rootHashBytes,
 		api.HexBytes{},
 		api.HexBytes{},
-		nil,
 	)
 
 	// Pre-store the block (simulating previous attempt that stored block but failed on MarkProcessed)
@@ -385,7 +381,6 @@ func (s *FinalizeDuplicateTestSuite) Test5_DuplicateBlockAlreadyFinalized() {
 		rootHashBytes,
 		api.HexBytes{},
 		api.HexBytes{},
-		nil,
 	)
 
 	// Pre-store the block as FINALIZED (simulating previous successful attempt except MarkProcessed)
@@ -484,7 +479,6 @@ func (s *FinalizeDuplicateTestSuite) Test6_BlockRecordsMatchPendingCommitmentsOn
 		rootHashBytes,
 		api.HexBytes{},
 		api.HexBytes{},
-		nil,
 	)
 
 	err = rm.FinalizeBlock(ctx, block)

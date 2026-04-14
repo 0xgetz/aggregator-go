@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math/big"
+	"math/bits"
 
 	"github.com/unicitynetwork/aggregator-go/internal/config"
 	"github.com/unicitynetwork/aggregator-go/internal/models"
@@ -195,33 +195,34 @@ func (v *CertificationRequestValidator) ValidateShardID(stateID api.StateID) err
 	return nil
 }
 
-// verifyShardID Checks if commitmentID's least significant bits match the shard bitmask.
+// verifyShardID checks whether the raw SMT key bits of commitmentID match the
+// configured shard prefix under the SMT's LSB-first byte layout.
 func verifyShardID(commitmentID string, shardBitmask int) (bool, error) {
-	// convert to big.Ints
-	bytes, err := hex.DecodeString(commitmentID)
+	keyBytes, err := hex.DecodeString(commitmentID)
 	if err != nil {
 		return false, fmt.Errorf("failed to decode certification state ID: %w", err)
 	}
-	commitmentIdBigInt := new(big.Int).SetBytes(bytes)
-	shardBitmaskBigInt := new(big.Int).SetInt64(int64(shardBitmask))
+	if len(keyBytes) != api.StateTreeKeyLengthBytes {
+		return false, fmt.Errorf(
+			"certification state ID must be exactly %d bytes, got %d",
+			api.StateTreeKeyLengthBytes, len(keyBytes),
+		)
+	}
 
-	// find position of MSB e.g.
-	// 0b111 -> BitLen=3 -> 3-1=2
-	msbPos := shardBitmaskBigInt.BitLen() - 1
+	shardDepth := bits.Len(uint(shardBitmask)) - 1
+	if shardDepth < 0 {
+		return false, fmt.Errorf("invalid shard bitmask: %d", shardBitmask)
+	}
+	if len(keyBytes) < (shardDepth+7)/8 {
+		return false, fmt.Errorf("certification state ID too short for shard depth %d", shardDepth)
+	}
 
-	// build a mask covering bits below MSB e.g.
-	// 1<<2=0b100; 0b100-1=0b11; compareMask=0b11
-	compareMask := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), uint(msbPos)), big.NewInt(1))
-
-	// remove MSB from shardBitmask to get expected value e.g.
-	// 0b111 & 0b11 = 0b11
-	expected := new(big.Int).And(shardBitmaskBigInt, compareMask)
-
-	// extract low bits from certification request e.g.
-	// commitment=0b11111111 & 0b11 = 0b11
-	commitmentLowBits := new(big.Int).And(commitmentIdBigInt, compareMask)
-
-	// return true if the certification request low bits match bitmask bits e.g.
-	// 0b11 == 0b11
-	return commitmentLowBits.Cmp(expected) == 0, nil
+	for d := 0; d < shardDepth; d++ {
+		expected := byte((uint(shardBitmask) >> uint(d)) & 1)
+		actual := (keyBytes[d/8] >> (uint(d) % 8)) & 1
+		if actual != expected {
+			return false, nil
+		}
+	}
+	return true, nil
 }
