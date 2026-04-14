@@ -434,7 +434,10 @@ func (rm *RoundManager) FinalizeBlock(ctx context.Context, block *models.Block) 
 	}
 
 	persistDataStart = time.Now()
-	smtNodes := rm.convertLeavesToNodes(pendingLeaves)
+	smtNodes, err := rm.convertLeavesToNodes(pendingLeaves)
+	if err != nil {
+		return fmt.Errorf("failed to convert leaves to storage nodes: %w", err)
+	}
 	records := rm.convertCommitmentsToRecords(pendingCommitments, block.Index)
 
 	block.Finalized = false
@@ -582,9 +585,9 @@ func (rm *RoundManager) FinalizeBlock(ctx context.Context, block *models.Block) 
 }
 
 // convertLeavesToNodes converts SMT leaves to storage models
-func (rm *RoundManager) convertLeavesToNodes(leaves []*smt.Leaf) []*models.SmtNode {
+func (rm *RoundManager) convertLeavesToNodes(leaves []*smt.Leaf) ([]*models.SmtNode, error) {
 	if len(leaves) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	keyLength := rm.smt.GetKeyLength()
@@ -592,16 +595,13 @@ func (rm *RoundManager) convertLeavesToNodes(leaves []*smt.Leaf) []*models.SmtNo
 	for _, leaf := range leaves {
 		keyBytes, err := api.PathToFixedBytes(leaf.Path, keyLength)
 		if err != nil {
-			rm.logger.Error("failed to convert leaf path to SMT storage key",
-				"path", leaf.Path.String(),
-				"error", err.Error())
-			continue
+			return nil, fmt.Errorf("failed to convert leaf path %s to SMT storage key: %w", leaf.Path.String(), err)
 		}
 		key := api.NewHexBytes(keyBytes)
 		value := api.NewHexBytes(leaf.Value)
 		smtNodes = append(smtNodes, models.NewSmtNode(key, value))
 	}
-	return smtNodes
+	return smtNodes, nil
 }
 
 // convertCommitmentsToRecords converts commitments to aggregator records

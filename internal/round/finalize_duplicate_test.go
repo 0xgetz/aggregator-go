@@ -91,7 +91,8 @@ func (s *FinalizeDuplicateTestSuite) Test1_DuplicateRecovery() {
 
 	// Pre-populate storage with 2 out of 5 records (simulating partial write before crash)
 	partialLeaves := rm.currentRound.PendingLeaves[:2]
-	preExistingNodes := rm.convertLeavesToNodes(partialLeaves)
+	preExistingNodes, err := rm.convertLeavesToNodes(partialLeaves)
+	require.NoError(t, err)
 	err = s.storage.SmtStorage().StoreBatch(ctx, preExistingNodes)
 	require.NoError(t, err, "Pre-populating SMT nodes should succeed")
 
@@ -224,7 +225,8 @@ func (s *FinalizeDuplicateTestSuite) Test3_AllDuplicates() {
 	recordCountBefore, _ := s.storage.AggregatorRecordStorage().Count(ctx)
 
 	// Pre-populate ALL SMT nodes and aggregator records
-	allNodes := rm.convertLeavesToNodes(rm.currentRound.PendingLeaves)
+	allNodes, err := rm.convertLeavesToNodes(rm.currentRound.PendingLeaves)
+	require.NoError(t, err)
 	err = s.storage.SmtStorage().StoreBatch(ctx, allNodes)
 	require.NoError(t, err)
 
@@ -402,7 +404,8 @@ func (s *FinalizeDuplicateTestSuite) Test5_DuplicateBlockAlreadyFinalized() {
 	require.NoError(t, err, "Pre-storing block records should succeed")
 
 	// Pre-store all SMT nodes and records (simulating full previous attempt)
-	allNodes := rm.convertLeavesToNodes(rm.currentRound.PendingLeaves)
+	allNodes, err := rm.convertLeavesToNodes(rm.currentRound.PendingLeaves)
+	require.NoError(t, err)
 	err = s.storage.SmtStorage().StoreBatch(ctx, allNodes)
 	require.NoError(t, err)
 
