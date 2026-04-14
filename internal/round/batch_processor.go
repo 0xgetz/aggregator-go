@@ -283,7 +283,7 @@ func (rm *RoundManager) pollForParentProof(ctx context.Context, rootHash api.Hex
 					"error", err.Error())
 				continue
 			}
-			if proof == nil || !proof.IsValid(rm.config.Sharding.Child.ShardID, rootHash) {
+			if proof == nil || !proof.IsValid(rm.config.Sharding.Child.ShardID, rm.config.Sharding.ShardIDLength, rootHash) {
 				continue
 			}
 

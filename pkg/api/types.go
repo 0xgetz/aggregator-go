@@ -149,7 +149,7 @@ type ParentInclusionFragment struct {
 	ShardLeafValue   HexBytes `json:"shardLeafValue"`
 }
 
-func (f *ParentInclusionFragment) Verify(shardID ShardID, expectedLeafValue, expectedRoot []byte, algo HashAlgorithm) error {
+func (f *ParentInclusionFragment) Verify(shardID ShardID, keyLength int, expectedLeafValue, expectedRoot []byte, algo HashAlgorithm) error {
 	if f == nil {
 		return errors.New("missing parent fragment")
 	}
@@ -169,7 +169,10 @@ func (f *ParentInclusionFragment) Verify(shardID ShardID, expectedLeafValue, exp
 	if path.Sign() <= 0 || path.BitLen() <= 1 {
 		return fmt.Errorf("invalid shard ID %d", shardID)
 	}
-	key, err := PathToFixedBytes(path, path.BitLen()-1)
+	if keyLength <= 0 {
+		return fmt.Errorf("keyLength must be positive, got %d", keyLength)
+	}
+	key, err := PathToFixedBytes(path, keyLength)
 	if err != nil {
 		return fmt.Errorf("failed to derive parent fragment key: %w", err)
 	}
@@ -281,7 +284,7 @@ func (h *HealthStatus) AddDetail(key, value string) {
 	h.Details[key] = value
 }
 
-func (r *RootShardInclusionProof) IsValid(shardID ShardID, shardRootHash HexBytes) bool {
+func (r *RootShardInclusionProof) IsValid(shardID ShardID, keyLength int, shardRootHash HexBytes) bool {
 	if r == nil || len(r.UnicityCertificate) == 0 || r.ParentFragment == nil {
 		return false
 	}
@@ -289,7 +292,7 @@ func (r *RootShardInclusionProof) IsValid(shardID ShardID, shardRootHash HexByte
 	if err != nil {
 		return false
 	}
-	return r.ParentFragment.Verify(shardID, shardRootHash, rootRaw, InclusionProofV2HashAlgorithm) == nil
+	return r.ParentFragment.Verify(shardID, keyLength, shardRootHash, rootRaw, InclusionProofV2HashAlgorithm) == nil
 }
 
 type Sharding struct {

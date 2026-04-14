@@ -328,7 +328,7 @@ func (suite *ParentServiceTestSuite) TestGetShardProof_Success() {
 		ParentFragment:     parentResponse.ParentFragment,
 		UnicityCertificate: parentResponse.UnicityCertificate,
 		BlockNumber:        parentResponse.BlockNumber,
-	}).IsValid(shard0ID, api.NewHexBytes(childRootRaw)))
+	}).IsValid(shard0ID, suite.cfg.Sharding.ShardIDLength, api.NewHexBytes(childRootRaw)))
 
 	suite.T().Log("✓ End-to-end test: child SMT → parent submission → native parent fragment verification SUCCESS")
 }
@@ -430,17 +430,17 @@ func (suite *ParentServiceTestSuite) TestGetShardProof_MultipleShards() {
 		ParentFragment:     proof0.ParentFragment,
 		UnicityCertificate: proof0.UnicityCertificate,
 		BlockNumber:        proof0.BlockNumber,
-	}).IsValid(shard0ID, makeTestHash(0xAA)))
+	}).IsValid(shard0ID, suite.cfg.Sharding.ShardIDLength, makeTestHash(0xAA)))
 	suite.Assert().True((&api.RootShardInclusionProof{
 		ParentFragment:     proof1.ParentFragment,
 		UnicityCertificate: proof1.UnicityCertificate,
 		BlockNumber:        proof1.BlockNumber,
-	}).IsValid(shard1ID, makeTestHash(0xBB)))
+	}).IsValid(shard1ID, suite.cfg.Sharding.ShardIDLength, makeTestHash(0xBB)))
 	suite.Assert().True((&api.RootShardInclusionProof{
 		ParentFragment:     proof2.ParentFragment,
 		UnicityCertificate: proof2.UnicityCertificate,
 		BlockNumber:        proof2.BlockNumber,
-	}).IsValid(shard2ID, makeTestHash(0xCC)))
+	}).IsValid(shard2ID, suite.cfg.Sharding.ShardIDLength, makeTestHash(0xCC)))
 
 	suite.T().Log("✓ GetShardProof returns valid parent fragments for multiple shards")
 }

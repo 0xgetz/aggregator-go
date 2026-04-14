@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math/bits"
 
 	"github.com/unicitynetwork/aggregator-go/internal/config"
 	"github.com/unicitynetwork/aggregator-go/internal/models/v1"
@@ -232,23 +231,7 @@ func verifyShardID(commitmentID string, shardBitmask int) (bool, error) {
 	if len(keyBytes) == api.StateTreeKeyLengthBytes+2 {
 		keyBytes = keyBytes[2:]
 	}
-
-	shardDepth := bits.Len(uint(shardBitmask)) - 1
-	if shardDepth < 0 {
-		return false, fmt.Errorf("invalid shard bitmask: %d", shardBitmask)
-	}
-	if len(keyBytes) < (shardDepth+7)/8 {
-		return false, fmt.Errorf("certification state ID too short for shard depth %d", shardDepth)
-	}
-
-	for d := 0; d < shardDepth; d++ {
-		expected := byte((uint(shardBitmask) >> uint(d)) & 1)
-		actual := (keyBytes[d/8] >> (uint(d) % 8)) & 1
-		if actual != expected {
-			return false, nil
-		}
-	}
-	return true, nil
+	return api.MatchesShardPrefix(keyBytes, shardBitmask)
 }
 
 // CreateDataHashImprint creates a DataHash imprint in the Unicity format:

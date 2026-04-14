@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/bits"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -218,19 +217,7 @@ func matchesShardMask(requestIDHex string, shardMask int) (bool, error) {
 	if len(keyBytes) != api.StateTreeKeyLengthBytes {
 		return false, fmt.Errorf("invalid request ID length: got %d, want %d", len(keyBytes), api.StateTreeKeyLengthBytes)
 	}
-
-	shardDepth := bits.Len(uint(shardMask)) - 1
-	if shardDepth < 0 {
-		return false, fmt.Errorf("invalid shard mask: %d", shardMask)
-	}
-	for d := 0; d < shardDepth; d++ {
-		expected := byte((uint(shardMask) >> uint(d)) & 1)
-		actual := (keyBytes[d/8] >> (uint(d) % 8)) & 1
-		if actual != expected {
-			return false, nil
-		}
-	}
-	return true, nil
+	return api.MatchesShardPrefix(keyBytes, shardMask)
 }
 
 // matchesAnyShardTarget checks if a request ID matches any of the configured shard targets
