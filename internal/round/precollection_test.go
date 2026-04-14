@@ -627,7 +627,8 @@ func TestChildPrecollector_DeactivateDuringInFlightRound(t *testing.T) {
 			MaxCommitmentsPerRound: 1000,
 		},
 		Sharding: config.ShardingConfig{
-			Mode: config.ShardingModeChild,
+			Mode:          config.ShardingModeChild,
+			ShardIDLength: 1,
 			Child: config.ChildConfig{
 				ShardID:            0b11,
 				ParentPollTimeout:  5 * time.Second,
@@ -700,7 +701,8 @@ func TestChildRound_ParentProofTimeoutIsRetriable(t *testing.T) {
 			MaxCommitmentsPerRound: 1000,
 		},
 		Sharding: config.ShardingConfig{
-			Mode: config.ShardingModeChild,
+			Mode:          config.ShardingModeChild,
+			ShardIDLength: 1,
 			Child: config.ChildConfig{
 				ShardID:            0b11,
 				ParentPollTimeout:  100 * time.Millisecond,
@@ -836,7 +838,8 @@ func TestPipelinedChildModeFlow(t *testing.T) {
 				MaxCommitmentsPerRound: 1000,
 			},
 			Sharding: config.ShardingConfig{
-				Mode: config.ShardingModeChild,
+				Mode:          config.ShardingModeChild,
+				ShardIDLength: 1,
 				Child: config.ChildConfig{
 					ShardID:            0b11,
 					ParentPollTimeout:  5 * time.Second,
@@ -906,7 +909,8 @@ func TestChildPreCollection_CommitmentAfterProofBeforeRoundEnd_ShouldBeInNextRou
 			MaxCommitmentsPerRound: 1000,
 		},
 		Sharding: config.ShardingConfig{
-			Mode: config.ShardingModeChild,
+			Mode:          config.ShardingModeChild,
+			ShardIDLength: 1,
 			Child: config.ChildConfig{
 				ShardID:            0b11,
 				ParentPollTimeout:  5 * time.Second,
@@ -975,7 +979,8 @@ func TestChildMode_RequiresFreshParentProof(t *testing.T) {
 			MaxCommitmentsPerRound: 1000,
 		},
 		Sharding: config.ShardingConfig{
-			Mode: config.ShardingModeChild,
+			Mode:          config.ShardingModeChild,
+			ShardIDLength: 1,
 			Child: config.ChildConfig{
 				ShardID:            0b11,
 				ParentPollTimeout:  5 * time.Second,
