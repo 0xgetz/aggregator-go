@@ -1,3 +1,14 @@
+// Package gateway exposes the aggregator's public API surface over both
+// HTTP REST and JSON-RPC 2.0 transports.
+//
+// Handlers receive decoded request objects from the transport layer, delegate
+// to [service.AggregatorService] for all business logic, and return typed
+// response objects that the transport layer serialises to JSON.
+//
+// Error handling follows a two-tier model: validation errors (malformed
+// requests, missing fields) are returned as 400-class HTTP errors or
+// JSON-RPC error codes; internal errors bubble up as 500-class responses
+// with the error detail logged server-side but not exposed to callers.
 package gateway
 
 import (

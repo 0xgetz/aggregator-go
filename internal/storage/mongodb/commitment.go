@@ -1,3 +1,14 @@
+// Package mongodb provides MongoDB-backed implementations of the storage
+// interfaces defined in [interfaces].
+//
+// Each collection is managed by a dedicated type (e.g. CommitmentStorage,
+// BlockStorage, SmtStorage) so that collection-specific index management,
+// query patterns, and error translation are co-located with the collection
+// they serve.
+//
+// All exported methods accept a [context.Context] and propagate cancellation
+// to the underlying driver calls, so callers can enforce deadlines and
+// participate in graceful shutdown without additional wrappers.
 package mongodb
 
 import (
