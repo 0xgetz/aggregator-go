@@ -1,3 +1,22 @@
+// Package round manages the aggregator's block-production lifecycle.
+//
+// Each round consists of three phases:
+//
+//  1. Collect — inbound [CertificationRequest] items are drained from the
+//     commitment stream for a fixed collection window ([collectPhaseDuration]).
+//     Commitments arriving while the round is open are grouped into mini-batches
+//     ([miniBatchSize]) and inserted into the current round's sparse Merkle tree
+//     (SMT) snapshot incrementally so that CPU work is spread over the window.
+//
+//  2. Process — once the window closes the pending SMT leaves are finalised, the
+//     root hash is computed, and a block proposal is submitted to the BFT layer.
+//
+//  3. Finalize — after BFT consensus the block is committed to persistent
+//     storage, the SMT nodes are flushed, and the next round is opened.
+//
+// A background [commitmentPrefetcher] goroutine continuously fetches
+// unprocessed commitments from the MongoDB queue and feeds them into the
+// in-memory channel so that the collect phase never stalls on a DB read.
 package round
 
 import (
@@ -32,7 +51,13 @@ const (
 	RoundStateFinalizing                   // Finalizing block
 )
 
-const miniBatchSize = 100 // Number of commitments to process per SMT mini-batch
+const (
+	miniBatchSize        = 100                     // Number of commitments to process per SMT mini-batch
+	collectPhaseDuration = 200 * time.Millisecond // Duration of the commitment-collection window per round
+	prefetchMinSpace     = 100                    // Minimum channel headroom before prefetcher fetches more
+	prefetchBatchBuffer  = 50                     // Channel slots to keep free as a safety buffer
+	prefetchMaxBatch     = 500                    // Maximum number of commitments fetched per prefetch tick
+)
 
 func (rs RoundState) String() string {
 	switch rs {
@@ -454,28 +479,33 @@ func (rm *RoundManager) processRound(ctx context.Context) error {
 	rm.roundMutex.Unlock()
 
 	if !rm.config.Sharding.Mode.IsChild() {
-		collectDuration := 200 * time.Millisecond
-		deadline := time.Now().Add(collectDuration)
+		// Collect commitments for the configured collection window using a proper
+		// timer-based select instead of a busy-sleep loop. This avoids wasting CPU
+		// and reduces latency — the goroutine blocks efficiently until either a
+		// commitment arrives, the window expires, or the context is cancelled.
+		collectTimer := time.NewTimer(collectPhaseDuration)
+		defer collectTimer.Stop()
 
-		for time.Now().Before(deadline) {
+	collectLoop:
+		for {
 			select {
 			case commitment := <-rm.commitmentStream:
 				rm.roundMutex.Lock()
 				rm.currentRound.Commitments = append(rm.currentRound.Commitments, commitment)
-				if len(rm.currentRound.Commitments)%100 == 0 {
-					batch := rm.currentRound.Commitments[len(rm.currentRound.Commitments)-100:]
+				if len(rm.currentRound.Commitments)%miniBatchSize == 0 {
+					batch := rm.currentRound.Commitments[len(rm.currentRound.Commitments)-miniBatchSize:]
 					rm.processMiniBatch(ctx, batch)
 				}
 				rm.roundMutex.Unlock()
+			case <-collectTimer.C:
+				break collectLoop
 			case <-ctx.Done():
 				return ctx.Err()
-			default:
-				time.Sleep(10 * time.Millisecond)
 			}
 		}
 
 		rm.roundMutex.Lock()
-		remaining := len(rm.currentRound.Commitments) % 100
+		remaining := len(rm.currentRound.Commitments) % miniBatchSize
 		if remaining > 0 {
 			batch := rm.currentRound.Commitments[len(rm.currentRound.Commitments)-remaining:]
 			rm.processMiniBatch(ctx, batch)
@@ -552,18 +582,23 @@ func (rm *RoundManager) commitmentPrefetcher(ctx context.Context) {
 			rm.logger.WithContext(ctx).Info("Commitment prefetcher context cancelled")
 			return
 		case <-ticker.C:
-			// Check channel space - be conservative to avoid race conditions
-			channelSpace := cap(rm.commitmentStream) - len(rm.commitmentStream)
+			// Check channel space - be conservative to avoid race conditions.
+				// Skip entirely if we don't have enough headroom; this avoids a
+				// DB round-trip when the consumer is already falling behind.
+				channelSpace := cap(rm.commitmentStream) - len(rm.commitmentStream)
 
-			if channelSpace > 100 { // Only fetch if we have reasonable space
+				if channelSpace <= prefetchMinSpace {
+					continue
+				}
+
 				// Get current cursor
 				rm.streamMutex.RLock()
 				cursor := rm.lastFetchedID
 				rm.streamMutex.RUnlock()
 
-				// Fetch only what we can fit, with some buffer for concurrent consumption
-				// Fetch smaller batches to avoid overwhelming the channel
-				fetchSize := min(channelSpace-50, 500) // Smaller batches, leave buffer
+				// Fetch only what we can fit, leaving a safety buffer so the
+				// channel isn't filled to the brim in one tick.
+				fetchSize := min(channelSpace-prefetchBatchBuffer, prefetchMaxBatch)
 				if fetchSize <= 0 {
 					continue
 				}
@@ -590,9 +625,13 @@ func (rm *RoundManager) commitmentPrefetcher(ctx context.Context) {
 					}
 				}
 
-				// Push to channel
+				// Push to channel; break out of the push loop as soon as the
+				// channel is full so we don't block the prefetch goroutine.
+				// Using a labelled break instead of goto avoids jumping across
+				// any variable declarations and keeps the flow clearer.
 				addedCount := 0
 				lastAddedIdx := -1
+			pushLoop:
 				for i, commitment := range commitments {
 					select {
 					case rm.commitmentStream <- commitment:
@@ -601,15 +640,14 @@ func (rm *RoundManager) commitmentPrefetcher(ctx context.Context) {
 					case <-ctx.Done():
 						return
 					default:
-						// Channel full, stop trying to add more
-						goto DonePushing
+						// Channel full — stop pushing; we will retry on next tick.
+						break pushLoop
 					}
 				}
-			DonePushing:
 
 				// Update cursor based on what we actually added
 				if lastAddedIdx >= 0 {
-					// Update cursor to the last successfully added commitment
+					// Advance cursor to the last successfully enqueued commitment.
 					rm.streamMutex.Lock()
 					rm.lastFetchedID = commitments[lastAddedIdx].ID.Hex()
 					rm.streamMutex.Unlock()
@@ -627,9 +665,10 @@ func (rm *RoundManager) commitmentPrefetcher(ctx context.Context) {
 			}
 		}
 	}
-}
 
-// restoreSmtFromStorage restores the SMT tree from persisted nodes in storage
+// restoreSmtFromStorage rebuilds the in-memory SMT from nodes persisted in
+// storage. It is called during startup to restore the tree state before the
+// node begins accepting new commitments.
 func (rm *RoundManager) restoreSmtFromStorage(ctx context.Context) (*api.BigInt, error) {
 	rm.logger.Info("Starting SMT restoration from storage")
 
@@ -646,35 +685,36 @@ func (rm *RoundManager) restoreSmtFromStorage(ctx context.Context) (*api.BigInt,
 
 	rm.logger.Info("Found SMT nodes in storage, starting restoration", "totalNodes", totalCount)
 
-	const chunkSize = 10000
+	// smtRestoreChunkSize is the number of SMT nodes loaded per DB round-trip
+	// during startup restoration. Kept as a local constant so it doesn't
+	// pollute the package-level namespace; it is only relevant to this function.
+	const smtRestoreChunkSize = 10000
+
+	// Pre-allocate the full leaf slice so we only call AddLeaves once at the
+	// end. Calling AddLeaves on every chunk would rebuild partial tree state
+	// on each iteration, multiplying the hash-computation work by O(chunks).
+	allLeaves := make([]*smt.Leaf, 0, totalCount)
+
 	offset := 0
 	restoredCount := 0
 
 	for {
-		// Load chunk of nodes
-		nodes, err := rm.storage.SmtStorage().GetChunked(ctx, offset, chunkSize)
+		nodes, err := rm.storage.SmtStorage().GetChunked(ctx, offset, smtRestoreChunkSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load SMT chunk at offset %d: %w", offset, err)
 		}
 
 		if len(nodes) == 0 {
-			break // No more data
+			break
 		}
 
-		// Convert storage nodes to SMT leaves
-		leaves := make([]*smt.Leaf, len(nodes))
-		for i, node := range nodes {
-			// Convert key bytes back to big.Int path
+		for _, node := range nodes {
 			path := new(big.Int).SetBytes(node.Key)
-			leaves[i] = smt.NewLeaf(path, node.Value)
-		}
-
-		if _, err := rm.smt.AddLeaves(leaves); err != nil {
-			return nil, fmt.Errorf("failed to restore SMT leaves at offset %d: %w", offset, err)
+			allLeaves = append(allLeaves, smt.NewLeaf(path, node.Value))
 		}
 
 		restoredCount += len(nodes)
-		rm.logger.Info("Restored SMT chunk",
+		rm.logger.Info("Loaded SMT chunk from storage",
 			"offset", offset,
 			"chunkSize", len(nodes),
 			"restoredCount", restoredCount,
@@ -683,8 +723,16 @@ func (rm *RoundManager) restoreSmtFromStorage(ctx context.Context) (*api.BigInt,
 
 		offset += len(nodes)
 
-		if len(nodes) < chunkSize {
-			break // Last chunk
+		if len(nodes) < smtRestoreChunkSize {
+			break
+		}
+	}
+
+	// Single AddLeaves call — the SMT is built exactly once from all leaves,
+	// avoiding redundant rehashing of already-inserted nodes.
+	if len(allLeaves) > 0 {
+		if _, err := rm.smt.AddLeaves(allLeaves); err != nil {
+			return nil, fmt.Errorf("failed to restore SMT from %d leaves: %w", len(allLeaves), err)
 		}
 	}
 
