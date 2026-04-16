@@ -830,3 +830,129 @@ For issues and questions:
 - Create GitHub issues for bugs and feature requests
 - Check the `/health` endpoint for service status
 - Review logs for detailed error information
+
+---
+
+## Architecture Overview
+
+```
+                         ┌──────────────────────────────────────────┐
+                         │                  Clients                  │
+                         └──────────────┬───────────────────────────┘
+                                        │  HTTP REST / JSON-RPC 2.0
+                         ┌──────────────▼───────────────────────────┐
+                         │              Gateway Layer                │
+                         │  handlers.go  ·  REST router  ·  JSONRPC │
+                         └──────────────┬───────────────────────────┘
+                                        │
+                         ┌──────────────▼───────────────────────────┐
+                         │           AggregatorService               │
+                         │  (internal/service/service.go)            │
+                         └──────────┬────────────────────────────────┘
+                                    │
+              ┌─────────────────────┼──────────────────────┐
+              │                     │                       │
+  ┌───────────▼──────┐  ┌──────────▼──────────┐  ┌────────▼────────────┐
+  │  RoundManager    │  │  Storage (MongoDB)   │  │  BFT Client         │
+  │  (round/)        │  │  (storage/mongodb/)  │  │  (bft/)             │
+  │                  │  │                      │  │                      │
+  │  Collect phase   │  │  Commitments         │  │  ProposeBlock        │
+  │  Process phase   │  │  Blocks              │  │  FinalizeBlock       │
+  │  Finalize phase  │  │  SMT nodes           │  │  SubmitShardRoot     │
+  └──────┬───────────┘  └──────────────────────┘  └──────────────────────┘
+         │
+  ┌──────▼───────────┐
+  │  SMT (in-memory) │
+  │  (smt/)          │
+  │                  │
+  │  Sparse Merkle   │
+  │  Tree snapshot   │
+  │  + persistence   │
+  └──────────────────┘
+```
+
+### Round Lifecycle
+
+Each consensus round proceeds through three sequential phases:
+
+| Phase | Duration | Action |
+|-------|----------|--------|
+| **Collect** | `collectPhaseDuration` (env: `ROUND_DURATION`) | Drains `commitmentStream`; mini-batches inserted into SMT snapshot incrementally. |
+| **Process** | < 1 s | Remaining pending leaves flushed, SMT root computed, block proposed to BFT layer. |
+| **Finalize** | BFT consensus time | Committed to MongoDB, SMT nodes persisted, next round opened. |
+
+### Sharding Modes
+
+| Mode | Description |
+|------|-------------|
+| `standalone` | Single-node aggregator; handles all state IDs. |
+| `parent` | Aggregates shard roots from child aggregators; does not accept direct commitments. |
+| `child` | Handles a subset of state IDs (determined by `SHARDING_SHARD_ID`); submits shard roots to parent. |
+
+---
+
+## Environment Variable Reference
+
+All configuration is loaded from environment variables at startup. The table
+below covers the most commonly tuned settings; a full listing is in
+`internal/config/config.go`.
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SERVER_PORT` | `8080` | HTTP listen port |
+| `SERVER_ENABLE_TLS` | `false` | Enable HTTPS |
+| `SERVER_TLS_CERT_FILE` | — | Path to TLS certificate (required when TLS enabled) |
+| `SERVER_TLS_KEY_FILE` | — | Path to TLS private key (required when TLS enabled) |
+| `SERVER_HTTP2_MAX_CONCURRENT_STREAMS` | `1000` | HTTP/2 stream limit per connection |
+
+### Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection URI |
+| `MONGO_DATABASE` | `aggregator` | Database name |
+| `MONGO_TIMEOUT_SECONDS` | `10` | Query timeout |
+
+### Round Management
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ROUND_DURATION` | `1000ms` | Length of the collect phase |
+| `MINI_BATCH_SIZE` | `100` | Commitments processed per mini-batch tick |
+| `PREFETCH_LIMIT` | `1000` | Max commitments fetched per prefetch cycle |
+| `COMMITMENT_STREAM_SIZE` | `10000` | In-memory channel buffer size |
+
+### BFT Consensus
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BFT_NODE_ID` | — | Unique node identifier (required) |
+| `BFT_LISTEN_ADDR` | — | libp2p listen multiaddress, e.g. `/ip4/0.0.0.0/tcp/9000` |
+| `BFT_BOOTSTRAP_NODES` | — | Comma-separated multiaddresses of bootstrap peers |
+| `BFT_AUTH_KEY` | — | Base64-encoded Ed25519 authentication key |
+
+### Sharding
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SHARDING_MODE` | `standalone` | One of `standalone`, `parent`, `child` |
+| `SHARDING_SHARD_ID_LENGTH` | `4` | Number of bits used for shard ID prefix (1–16) |
+| `SHARDING_SHARD_ID` | — | Shard ID value (required in `child` mode) |
+| `SHARDING_PARENT_ADDR` | — | Parent aggregator address (required in `child` mode) |
+
+### High Availability
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HA_ENABLED` | `false` | Enable HA leader-election mode |
+| `HA_SERVER_ID` | — | Unique server identifier (required when HA enabled) |
+| `HA_REDIS_ADDR` | `localhost:6379` | Redis address for distributed locks |
+
+### Logging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error` |
+| `LOG_FORMAT` | `json` | One of `json`, `text` |
