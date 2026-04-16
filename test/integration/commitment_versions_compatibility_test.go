@@ -17,6 +17,9 @@ import (
 
 // TestCompatibilityV2 tests compatibility of v1 and v2 commitments and proofs
 func TestCompatibilityV2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	// phase 1:
 	// submit commitment_v1
 	// submit commitment_v2

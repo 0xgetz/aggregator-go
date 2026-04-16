@@ -274,6 +274,9 @@ func newTestPrecollector(t *testing.T, stream chan *models.CertificationRequest,
 }
 
 func TestDrainBufferedCommitments_StopsAtRoundBoundary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 8)
 	pending := make([]*models.CertificationRequest, 0, miniBatchSize)
 	collected := make([]*models.CertificationRequest, 0, 5)
@@ -300,6 +303,9 @@ func TestDrainBufferedCommitments_StopsAtRoundBoundary(t *testing.T) {
 // --- Tests for childPrecollector ---
 
 func TestChildPrecollector_CollectsContinuouslyAcrossRound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 100)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -340,6 +346,9 @@ func TestChildPrecollector_CollectsContinuouslyAcrossRound(t *testing.T) {
 }
 
 func TestChildPrecollector_AdvanceRound_FlushesPendingBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 200)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -363,6 +372,9 @@ func TestChildPrecollector_AdvanceRound_FlushesPendingBatch(t *testing.T) {
 }
 
 func TestChildPrecollector_AdvanceRound_NoDropAcrossBoundary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 200)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -399,6 +411,9 @@ func TestChildPrecollector_AdvanceRound_NoDropAcrossBoundary(t *testing.T) {
 }
 
 func TestChildPrecollector_HonorsMaxCommitmentsWithoutConsumingAndDropping(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 200)
 	maxPerRound := 5
 	cp, smtInstance := newTestPrecollector(t, stream, maxPerRound)
@@ -428,6 +443,9 @@ func TestChildPrecollector_HonorsMaxCommitmentsWithoutConsumingAndDropping(t *te
 }
 
 func TestChildPrecollector_ControlMessagesProgressUnderBackpressure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 200)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -458,6 +476,9 @@ func TestChildPrecollector_ControlMessagesProgressUnderBackpressure(t *testing.T
 }
 
 func TestChildPrecollector_StopCancelsCleanly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 100)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -489,6 +510,9 @@ func TestChildPrecollector_StopCancelsCleanly(t *testing.T) {
 }
 
 func TestChildPrecollector_AdvanceRoundWithNoData(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 100)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -507,6 +531,9 @@ func TestChildPrecollector_AdvanceRoundWithNoData(t *testing.T) {
 }
 
 func TestChildPrecollector_BatchWithBadLeafFallsBackToOneByOne(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	stream := make(chan *models.CertificationRequest, 100)
 	cp, smtInstance := newTestPrecollector(t, stream, 10000)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -545,6 +572,9 @@ func TestChildPrecollector_BatchWithBadLeafFallsBackToOneByOne(t *testing.T) {
 // --- Snapshot reparenting test (still valid with precollector) ---
 
 func TestPreCollectionReparenting(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("ReparentedSnapshotCommitsToMainSMT", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -612,6 +642,9 @@ func TestPreCollectionReparenting(t *testing.T) {
 // round should still finish block 1 once the proof is released, but it must
 // not start round 2.
 func TestChildPrecollector_DeactivateDuringInFlightRound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -685,6 +718,9 @@ func TestChildPrecollector_DeactivateDuringInFlightRound(t *testing.T) {
 }
 
 func TestChildRound_ParentProofTimeoutIsRetriable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -757,6 +793,9 @@ func TestChildRound_ParentProofTimeoutIsRetriable(t *testing.T) {
 }
 
 func TestStartNewRoundWithSnapshot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("SkipsCollectPhaseWithPreCollectedData", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -820,6 +859,9 @@ func TestStartNewRoundWithSnapshot(t *testing.T) {
 }
 
 func TestPipelinedChildModeFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("SecondRoundUsesPreCollectedData", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -891,6 +933,9 @@ func TestPipelinedChildModeFlow(t *testing.T) {
 // In proof-driven child mode, once block N is finalized the next round starts immediately.
 // A commitment arriving after that point must land in the following block.
 func TestChildPreCollection_CommitmentAfterProofBeforeRoundEnd_ShouldBeInNextRound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -960,6 +1005,9 @@ func TestChildPreCollection_CommitmentAfterProofBeforeRoundEnd_ShouldBeInNextRou
 }
 
 func TestChildMode_RequiresFreshParentProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -32,6 +32,9 @@ import (
 // TestShardingE2E tests the full sharding flow: parent + 2 child shards
 // submitting commitments and verifying inclusion proofs.
 func TestShardingE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx := t.Context()
 
 	// Start containers (shared MongoDB with different databases per aggregator)

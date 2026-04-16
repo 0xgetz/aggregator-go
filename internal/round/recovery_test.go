@@ -36,6 +36,9 @@ type RecoveryTestSuite struct {
 }
 
 func TestRecoverySuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	suite.Run(t, new(RecoveryTestSuite))
 }
 

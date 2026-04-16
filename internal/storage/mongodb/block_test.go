@@ -138,6 +138,9 @@ func createTestBlocksRange(start, count int64) []*models.Block {
 }
 
 func TestBlockStorage_Store(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 
@@ -212,6 +215,9 @@ func TestBlockStorage_Store(t *testing.T) {
 }
 
 func TestBlockStorage_GetByNumber(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 
@@ -274,6 +280,9 @@ func TestBlockStorage_GetByNumber(t *testing.T) {
 }
 
 func TestBlockStorage_GetLatest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 
@@ -372,6 +381,9 @@ func TestBlockStorage_GetLatest(t *testing.T) {
 }
 
 func TestBlockStorage_GetLatestByRootHash(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 
@@ -429,6 +441,9 @@ func TestBlockStorage_GetLatestByRootHash(t *testing.T) {
 }
 
 func TestBlockStorage_GetLatestNumber(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 
@@ -515,6 +530,9 @@ func TestBlockStorage_GetLatestNumber(t *testing.T) {
 }
 
 func TestBlockStorage_Count(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 
@@ -553,6 +571,9 @@ func TestBlockStorage_Count(t *testing.T) {
 }
 
 func TestBlockStorage_GetRange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db, cleanup := setupBlockTestDB(t)
 	defer cleanup()
 

@@ -16,15 +16,20 @@ run: build
 	@echo "Running $(BINARY_NAME)..."
 	@./$(BUILD_DIR)/$(BINARY_NAME)
 
-# Run tests
+# Run unit tests only (skips integration tests that require Docker/MongoDB/Redis)
 test:
-	@echo "Running tests..."
-	@go test -v ./...
+	@echo "Running unit tests..."
+	@go test -short -v ./...
 
-# Run tests with race detection
+# Run unit tests with race detection (skips integration tests)
 test-race:
-	@echo "Running tests with race detection..."
-	@go test -race -v ./...
+	@echo "Running unit tests with race detection..."
+	@go test -race -short -v ./...
+
+# Run integration tests (requires Docker for MongoDB and Redis containers)
+test-integration:
+	@echo "Running integration tests (requires Docker)..."
+	@go test -v -timeout 300s ./...
 
 # Run benchmarks
 benchmark:

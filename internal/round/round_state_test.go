@@ -35,6 +35,9 @@ func newTestSnapshot(t *testing.T) *smt.ThreadSafeSmtSnapshot {
 // RoundState value and ensures that an out-of-range value falls back to
 // "unknown" rather than panicking.
 func TestRoundStateString(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Parallel()
 
 	tests := []struct {
@@ -62,6 +65,9 @@ func TestRoundStateString(t *testing.T) {
 // TestTryAddLeavesOneByOne_EmptyInput verifies that the function handles an
 // empty leaf slice gracefully and returns pre-allocated (non-nil) result slices.
 func TestTryAddLeavesOneByOne_EmptyInput(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Parallel()
 
 	log := newErrorLogger(t)

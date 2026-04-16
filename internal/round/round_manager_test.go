@@ -21,6 +21,9 @@ import (
 
 // test the good case where blocks are created and stored successfully
 func TestParentShardIntegration_GoodCase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	// setup dependencies
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -71,6 +74,9 @@ func TestParentShardIntegration_GoodCase(t *testing.T) {
 
 // test that errors on parent communication cause retries (not deadlock)
 func TestParentShardIntegration_RoundProcessingError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cfg := config.Config{

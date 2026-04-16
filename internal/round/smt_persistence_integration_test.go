@@ -47,6 +47,9 @@ func cleanStorage(t *testing.T, storage *mongodb.Storage) {
 
 // TestSmtPersistenceAndRestoration tests SMT persistence and restoration with consistent root hashes
 func TestSmtPersistenceAndRestoration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := testutil.SetupTestStorage(t, conf)
 	t.Cleanup(func() { cleanStorage(t, storage) })
 
@@ -114,6 +117,9 @@ func TestSmtPersistenceAndRestoration(t *testing.T) {
 
 // TestLargeSmtRestoration tests multi-chunk restoration with large dataset
 func TestLargeSmtRestoration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := testutil.SetupTestStorage(t, conf)
 	t.Cleanup(func() { cleanStorage(t, storage) })
 
@@ -173,6 +179,9 @@ func TestLargeSmtRestoration(t *testing.T) {
 
 // TestCompleteWorkflowWithRestart tests end-to-end workflow including service restart simulation
 func TestCompleteWorkflowWithRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := testutil.SetupTestStorage(t, conf)
 	t.Cleanup(func() { cleanStorage(t, storage) })
 
@@ -270,6 +279,9 @@ func TestCompleteWorkflowWithRestart(t *testing.T) {
 
 // TestSmtRestorationWithBlockVerification tests that SMT restoration verifies against existing blocks
 func TestSmtRestorationWithBlockVerification(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := testutil.SetupTestStorage(t, conf)
 	t.Cleanup(func() { cleanStorage(t, storage) })
 

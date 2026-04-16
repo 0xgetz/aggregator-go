@@ -97,6 +97,9 @@ func createTestSmtNodes(count int) []*models.SmtNode {
 }
 
 func TestSmtStorage_Store(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 
 	storage := NewSmtStorage(db)
@@ -177,6 +180,9 @@ func TestSmtStorage_Store(t *testing.T) {
 }
 
 func TestSmtStorage_StoreBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -355,6 +361,9 @@ func TestSmtStorage_StoreBatch(t *testing.T) {
 }
 
 func TestSmtStorage_Count(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -390,6 +399,9 @@ func TestSmtStorage_Count(t *testing.T) {
 }
 
 func TestSmtStorage_GetChunked(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -434,6 +446,9 @@ func TestSmtStorage_GetChunked(t *testing.T) {
 }
 
 func TestSmtStorage_StoreBatch_DuplicateHandling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -471,6 +486,9 @@ func TestSmtStorage_StoreBatch_DuplicateHandling(t *testing.T) {
 }
 
 func TestSmtStorage_GetByKeys(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -558,6 +576,9 @@ func TestSmtStorage_GetByKeys(t *testing.T) {
 }
 
 func TestSmtStorage_DeleteBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -650,6 +671,9 @@ func TestSmtStorage_DeleteBatch(t *testing.T) {
 }
 
 func TestSmtStorage_Delete(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -700,6 +724,9 @@ func TestSmtStorage_Delete(t *testing.T) {
 }
 
 func TestSmtStorage_UpsertBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupSmtTestDB(t)
 	storage := NewSmtStorage(db)
 	ctx := context.Background()
@@ -801,6 +828,9 @@ func TestSmtStorage_UpsertBatch(t *testing.T) {
 }
 
 func TestSmtStorage_GetAll(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("should return all nodes from a populated collection", func(t *testing.T) {
 		db := setupSmtTestDB(t)
 		storage := NewSmtStorage(db)

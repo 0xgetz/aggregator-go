@@ -84,6 +84,9 @@ func createTestAggregatorRecord(stateID string, blockNumber int64, leafIndex int
 }
 
 func TestAggregatorRecordStorage_StoreBatch_DuplicateHandling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupAggregatorRecordTestDB(t)
 
 	storage := NewAggregatorRecordStorage(db)
@@ -143,6 +146,9 @@ func TestAggregatorRecordStorage_StoreBatch_DuplicateHandling(t *testing.T) {
 }
 
 func TestAggregatorRecordStorage_GetByBlockNumber(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupAggregatorRecordTestDB(t)
 	storage := NewAggregatorRecordStorage(db)
 	ctx := context.Background()
@@ -209,6 +215,9 @@ func TestAggregatorRecordStorage_GetByBlockNumber(t *testing.T) {
 }
 
 func TestAggregatorRecordStorage_RoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupAggregatorRecordTestDB(t)
 	storage := NewAggregatorRecordStorage(db)
 	ctx := t.Context()

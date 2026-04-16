@@ -445,6 +445,9 @@ func (suite *AggregatorTestSuite) TestInclusionProof() {
 
 // TestAggregatorTestSuite runs the test suite
 func TestAggregatorTestSuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	suite.Run(t, new(AggregatorTestSuite))
 }
 

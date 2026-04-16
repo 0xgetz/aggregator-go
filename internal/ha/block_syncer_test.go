@@ -28,6 +28,9 @@ func (m *mockLeaderSelector) IsLeader(_ context.Context) (bool, error) {
 }
 
 func TestBlockSyncer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx := t.Context()
 	storage := testutil.SetupTestStorage(t, config.Config{
 		Database: config.DatabaseConfig{

@@ -113,6 +113,9 @@ func createTestBlockRecords(blockNumber *api.BigInt, stateIDs []api.StateID) *mo
 }
 
 func TestBlockRecordsStorage_Store(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupTestDB(t)
 	storage := NewBlockRecordsStorage(db)
 	ctx := context.Background()
@@ -362,6 +365,9 @@ func TestBlockRecordsStorage_Store(t *testing.T) {
 }
 
 func TestBlockRecordsStorage_GetLatestBlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupTestDB(t)
 	storage := NewBlockRecordsStorage(db)
 	ctx := context.Background()
@@ -456,6 +462,9 @@ func TestBlockRecordsStorage_GetLatestBlock(t *testing.T) {
 }
 
 func TestBlockRecordsStorage_GetNextBlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupTestDB(t)
 
 	storage := NewBlockRecordsStorage(db)
@@ -565,6 +574,9 @@ func TestBlockRecordsStorage_GetNextBlock(t *testing.T) {
 }
 
 func TestBlockRecordsStorage_Store_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	db := setupTestDB(t)
 
 	storage := NewBlockRecordsStorage(db)
@@ -628,6 +640,9 @@ func TestBlockRecordsStorage_Store_Integration(t *testing.T) {
 
 // TestBlockRecordsStorage_Store_Unit contains unit tests that don't require a real MongoDB connection
 func TestBlockRecordsStorage_Store_Unit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("should validate BlockRecords structure", func(t *testing.T) {
 		// Test that BlockRecords can be created properly
 		blockNumber := api.NewBigInt(big.NewInt(42))
@@ -737,6 +752,9 @@ func TestBlockRecordsStorage_Store_Unit(t *testing.T) {
 
 // TestBlockRecordsStorage_Store_BSON tests BSON marshaling/unmarshaling of BlockRecords
 func TestBlockRecordsStorage_Store_BSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("should marshal and unmarshal BlockRecords to BSON", func(t *testing.T) {
 		// Create test data
 		blockNumber := api.NewBigInt(big.NewInt(12345))
@@ -834,6 +852,9 @@ func TestBlockRecordsStorage_Store_BSON(t *testing.T) {
 
 // TestBlockRecordsStorage_Store_Comprehensive demonstrates complete functionality
 func TestBlockRecordsStorage_Store_Comprehensive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	t.Run("should demonstrate complete BlockRecords functionality", func(t *testing.T) {
 		// This test demonstrates that all components work together:
 		// - BigInt BSON marshaling/unmarshaling

@@ -27,6 +27,9 @@ type FinalizeDuplicateTestSuite struct {
 }
 
 func TestFinalizeDuplicateSuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	suite.Run(t, new(FinalizeDuplicateTestSuite))
 }
 

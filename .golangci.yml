@@ -1,0 +1,61 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck       # check for unchecked errors
+    - gosimple       # simplification suggestions
+    - govet          # go vet checks
+    - ineffassign    # detect ineffectual assignments
+    - staticcheck    # static analysis checks
+    - unused         # detect unused code
+    - gofmt          # enforce gofmt formatting
+    - goimports      # enforce goimports formatting
+    - misspell       # catch common spelling mistakes
+    - godot          # check comment endings
+    - noctx          # detect http requests without context
+    - bodyclose      # check http response body is closed
+    - exhaustive     # check exhaustiveness of enum switches
+    - exportloopref  # check for pointers to enclosing loop variables
+    - gocritic       # various opinionated checks
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    enable-all: true
+    disable:
+      - shadow        # too noisy for this codebase
+  gofmt:
+    simplify: true
+  misspell:
+    locale: US
+  godot:
+    scope: declarations
+    capital: false
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+    disabled-checks:
+      - appendAssign  # false positives in generated code
+
+issues:
+  exclude-rules:
+    # Relax rules in test files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gocritic
+    # Ignore generated or vendored files
+    - path: vendor/
+      linters:
+        - all
+
+  max-issues-per-linter: 50
+  max-same-issues: 10
+  new-from-rev: ""   # lint all code, not just new changes
+
+run:
+  timeout: 5m
+  go: "1.24"

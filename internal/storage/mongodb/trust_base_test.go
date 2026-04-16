@@ -15,6 +15,9 @@ import (
 )
 
 func TestTrustBaseStorage_StoreAndGetByEpoch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := newTrustBaseStorage(t)
 	tbs := createTrustBases(t, 2)
 	for _, tb := range tbs {
@@ -42,6 +45,9 @@ func TestTrustBaseStorage_StoreAndGetByEpoch(t *testing.T) {
 }
 
 func TestTrustBaseStorage_GetByRound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := newTrustBaseStorage(t)
 	tbs := createTrustBases(t, 2)
 	for _, tb := range tbs {
@@ -73,6 +79,9 @@ func TestTrustBaseStorage_GetByRound(t *testing.T) {
 }
 
 func TestTrustBaseStorage_GetAll(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := newTrustBaseStorage(t)
 	tbs := createTrustBases(t, 3)
 	for _, tb := range tbs {
@@ -102,6 +111,9 @@ func TestTrustBaseStorage_GetAll(t *testing.T) {
 }
 
 func TestTrustBaseStorage_GetLatest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	storage := newTrustBaseStorage(t)
 	tbs := createTrustBases(t, 3)
 	for _, tb := range tbs {

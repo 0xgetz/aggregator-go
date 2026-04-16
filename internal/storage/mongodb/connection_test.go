@@ -46,6 +46,9 @@ func setupTransactionTestDB(t *testing.T) (*mongo.Client, *mongo.Database, func(
 
 // TestWithTransaction_Success tests that a successful transaction commits
 func TestWithTransaction_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	client, db, cleanup := setupTransactionTestDB(t)
 	if cleanup == nil {
 		return
@@ -78,6 +81,9 @@ func TestWithTransaction_Success(t *testing.T) {
 
 // TestWithTransaction_NonTransientError_FailsImmediately tests that non-transient errors fail without retry
 func TestWithTransaction_NonTransientError_FailsImmediately(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	client, db, cleanup := setupTransactionTestDB(t)
 	if cleanup == nil {
 		return
@@ -115,6 +121,9 @@ func TestWithTransaction_NonTransientError_FailsImmediately(t *testing.T) {
 
 // TestWithTransaction_CallbackError_RollsBack tests that callback errors cause rollback
 func TestWithTransaction_CallbackError_RollsBack(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	client, db, cleanup := setupTransactionTestDB(t)
 	if cleanup == nil {
 		return
@@ -147,6 +156,9 @@ func TestWithTransaction_CallbackError_RollsBack(t *testing.T) {
 
 // TestWithTransaction_TransientError_Retries tests that transient errors trigger retries
 func TestWithTransaction_TransientError_Retries(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	client, db, cleanup := setupTransactionTestDB(t)
 	if cleanup == nil {
 		return
@@ -252,6 +264,9 @@ func TestWithTransaction_TransientError_Retries(t *testing.T) {
 
 // TestWithTransaction_UpsertsDontAbort tests that our upsert approach works in transactions
 func TestWithTransaction_UpsertsDontAbort(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	client, db, cleanup := setupTransactionTestDB(t)
 	if cleanup == nil {
 		return

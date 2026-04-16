@@ -456,5 +456,8 @@ func (suite *ParentServiceTestSuite) TestGetShardProof_MultipleShards() {
 
 // TestParentServiceSuite runs the test suite
 func TestParentServiceSuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	suite.Run(t, new(ParentServiceTestSuite))
 }

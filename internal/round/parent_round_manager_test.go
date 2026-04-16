@@ -458,5 +458,8 @@ func (suite *ParentRoundManagerTestSuite) TestBlockRootMatchesSMTRoot() {
 
 // TestParentRoundManagerSuite runs the test suite
 func TestParentRoundManagerSuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	suite.Run(t, new(ParentRoundManagerTestSuite))
 }

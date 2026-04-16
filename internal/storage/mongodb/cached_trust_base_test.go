@@ -9,6 +9,9 @@ import (
 )
 
 func TestCachedTrustBaseStorage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	cachedStorage := NewCachedTrustBaseStorage(newTrustBaseStorage(t))
 	tbs := createTrustBases(t, 3)
 

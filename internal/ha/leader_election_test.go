@@ -32,6 +32,9 @@ var conf = config.Config{
 }
 
 func TestLeaderElection_LockContention(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx := t.Context()
 	storage := testutil.SetupTestStorage(t, conf)
 	leadershipStorage := storage.LeadershipStorage()
@@ -84,6 +87,9 @@ func TestLeaderElection_LockContention(t *testing.T) {
 }
 
 func TestLeaderElection_Failover(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	ctx := t.Context()
 	storage := testutil.SetupTestStorage(t, conf)
 	leadershipStorage := storage.LeadershipStorage()
