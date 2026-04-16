@@ -45,15 +45,15 @@ func (ts *ThreadSafeSMT) AddLeaf(path *big.Int, value []byte) error {
 	return ts.smt.AddLeaf(path, value)
 }
 
-// AddPreHashedLeaf adds a leaf where the value is already a hash calculated externally
-// This operation is exclusive and blocks all other operations
+// AddPreHashedLeaf adds a leaf where the value is already a hash calculated externally.
+// This is a thin wrapper around AddLeaf — the underlying SparseMerkleTree stores raw
+// hash bytes directly, so no extra hashing step is needed.
+// This operation is exclusive and blocks all other operations.
 func (ts *ThreadSafeSMT) AddPreHashedLeaf(path *big.Int, hash []byte) error {
 	ts.rwMux.Lock()
 	defer ts.rwMux.Unlock()
 
-	// TODO(SMT): Implement AddPreHashedLeaf in SparseMerkleTree
-	//return ts.smt.AddPreHashedLeaf(path, hash)
-	return nil
+	return ts.smt.AddLeaf(path, hash)
 }
 
 // GetRootHash returns the current root hash
@@ -89,26 +89,16 @@ func (ts *ThreadSafeSMT) GetKeyLength() int {
 	return ts.smt.keyLength
 }
 
-// GetStats returns statistics about the SMT
-// This is a read operation that can be performed concurrently
+// GetStats returns statistics about the SMT.
+// This is a read operation that can be performed concurrently.
 func (ts *ThreadSafeSMT) GetStats() map[string]interface{} {
 	ts.rwMux.RLock()
 	defer ts.rwMux.RUnlock()
 
-	// Get basic stats from the underlying SMT
 	return map[string]interface{}{
 		"rootHash":  ts.smt.GetRootHashHex(),
-		"leafCount": ts.getLeafCount(),
-		"isLocked":  false, // Could be enhanced to show lock status
+		"leafCount": ts.smt.CountLeaves(),
 	}
-}
-
-// getLeafCount returns the number of leaves in the tree
-// Note: This is an internal method that requires the caller to hold a lock
-func (ts *ThreadSafeSMT) getLeafCount() int {
-	// This would need to be implemented in the underlying SMT
-	// For now, return 0 as a placeholder
-	return 0
 }
 
 // WithReadLock executes a function while holding a read lock

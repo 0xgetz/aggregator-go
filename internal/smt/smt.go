@@ -726,6 +726,27 @@ type Leaf struct {
 	Value []byte
 }
 
+// CountLeaves returns the number of leaf nodes currently stored in the tree.
+// It traverses the tree recursively so it is O(n) in the number of leaves.
+func (smt *SparseMerkleTree) CountLeaves() int {
+	return countLeaves(smt.root)
+}
+
+// countLeaves is the recursive helper for CountLeaves.
+func countLeaves(b branch) int {
+	if b == nil {
+		return 0
+	}
+	if b.isLeaf() {
+		return 1
+	}
+	n, ok := b.(*NodeBranch)
+	if !ok {
+		return 0
+	}
+	return countLeaves(n.Left) + countLeaves(n.Right)
+}
+
 // NewLeaf creates a new leaf
 func NewLeaf(path *big.Int, value []byte) *Leaf {
 	return &Leaf{
