@@ -106,10 +106,15 @@ func (ars *AggregatorRecordStorage) GetByStateID(ctx context.Context, stateID ap
 	return ars.decodeRecord(raw)
 }
 
+// maxRecordsPerBlock caps the number of aggregator records returned for a single
+// block to prevent unbounded memory growth on very large blocks.
+const maxRecordsPerBlock = 10_000
+
 // GetByBlockNumber retrieves all records for a specific block
 func (ars *AggregatorRecordStorage) GetByBlockNumber(ctx context.Context, blockNumber *api.BigInt) ([]*models.AggregatorRecord, error) {
 	filter := bson.M{"blockNumber": bigIntToDecimal128(blockNumber)}
-	cursor, err := ars.collection.Find(ctx, filter)
+	opts := options.Find().SetLimit(maxRecordsPerBlock)
+	cursor, err := ars.collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find records by block number: %w", err)
 	}

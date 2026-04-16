@@ -14,6 +14,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/unicitynetwork/bft-go-base/types"
@@ -88,6 +89,9 @@ func (s *Server) handleGetNoDeletionProof(ctx context.Context, params json.RawMe
 	// Call service
 	response, err := s.service.GetNoDeletionProof(ctx)
 	if err != nil {
+		if errors.Is(err, errors.ErrUnsupported) {
+			return nil, jsonrpc.NewError(jsonrpc.MethodNotFoundCode, "get_no_deletion_proof is not yet implemented", nil)
+		}
 		s.logger.WithContext(ctx).Error("Failed to get no-deletion proof", "error", err.Error())
 		return nil, jsonrpc.NewError(jsonrpc.InternalErrorCode, "Failed to get no-deletion proof", err.Error())
 	}
