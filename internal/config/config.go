@@ -1,3 +1,14 @@
+// Package config loads and validates the aggregator's runtime configuration
+// from environment variables.
+//
+// All configuration is read once at startup via [Load]. The returned [Config]
+// struct is immutable after that point and is safe to share across goroutines
+// without additional synchronisation.
+//
+// Environment variable names follow a hierarchical naming scheme that mirrors
+// the struct hierarchy: BFT_* for BFT consensus settings, SHARDING_* for
+// sharding mode, MONGO_* for MongoDB, and REDIS_* for Redis. A full reference
+// is available in the project README.
 package config
 
 import (
@@ -359,8 +370,8 @@ func Load() (*Config, error) {
 		Enabled:                    getEnvBoolOrDefault("BFT_ENABLED", true),
 		Address:                    getEnvOrDefault("BFT_ADDRESS", "/ip4/0.0.0.0/tcp/9000"),
 		RPCAddress:                 getEnvOrDefault("BFT_RPC_ADDRESS", "http://127.0.0.1:8002"),
-		AnnounceAddresses:          strings.Split(getEnvOrDefault("BFT_ANNOUNCE_ADDRESSES", ""), ","),
-		BootstrapAddresses:         strings.Split(getEnvOrDefault("BFT_BOOTSTRAP_ADDRESSES", ""), ","),
+		AnnounceAddresses:          splitNonEmpty(getEnvOrDefault("BFT_ANNOUNCE_ADDRESSES", "")),
+		BootstrapAddresses:         splitNonEmpty(getEnvOrDefault("BFT_BOOTSTRAP_ADDRESSES", "")),
 		BootstrapConnectRetry:      getEnvIntOrDefault("BFT_BOOTSTRAP_CONNECT_RETRY", 3),
 		BootstrapConnectRetryDelay: getEnvIntOrDefault("BFT_BOOTSTRAP_CONNECT_RETRY_DELAY", 5),
 		HeartbeatInterval:          getEnvDurationOrDefault("BFT_HEARTBEAT_INTERVAL", "1s"),
@@ -498,6 +509,24 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// splitNonEmpty splits s on commas and discards any blank tokens.
+// This prevents strings.Split("", ",") from producing []string{""}, which
+// would cause BFT bootstrap-address validation to fail with a confusing
+// "invalid bootstrap address: empty string" error when the env var is unset.
+func splitNonEmpty(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := parts[:0] // reuse backing array
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func (c *BFTConfig) PeerConf() (*network.PeerConfiguration, error) {
