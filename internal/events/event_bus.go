@@ -28,12 +28,23 @@ func NewEventBus(log *logger.Logger) *EventBus {
 	}
 }
 
-// Subscribe creates a channel, adds it to the subscribers list, and returns it to the caller.
+// defaultSubscriberBuffer is the capacity of each subscriber channel created by
+// Subscribe. A buffer of 1 is sufficient when consumers always drain the channel
+// faster than events arrive, but in practice a burst of rapidly published events
+// (e.g. multiple commitments finalised in the same round) can cause silent drops.
+// 16 provides a reasonable safety margin without wasting significant memory.
+const defaultSubscriberBuffer = 16
+
+// Subscribe creates a buffered channel, registers it for the given topic, and
+// returns it to the caller. The caller is responsible for consuming events
+// promptly; if the channel fills up, Publish will drop the event and log a
+// warning rather than blocking. Call Unsubscribe when done to avoid leaking
+// goroutines that range over the channel.
 func (bus *EventBus) Subscribe(topic Topic) <-chan Event {
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
 
-	ch := make(chan Event, 1)
+	ch := make(chan Event, defaultSubscriberBuffer)
 	bus.subscribers[topic] = append(bus.subscribers[topic], ch)
 	return ch
 }
