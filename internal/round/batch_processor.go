@@ -1,3 +1,4 @@
+// Package round — see round_manager.go for the full package documentation.
 package round
 
 import (
@@ -19,36 +20,43 @@ import (
 	"github.com/unicitynetwork/aggregator-go/pkg/api"
 )
 
-// processMiniBatch processes a small batch of commitments into the SMT for efficiency
-// NOTE: The caller is expected to hold rm.roundMutex when calling this function
+// commitmentToLeaf converts a single CertificationRequest to an SMT leaf.
+// It returns (nil, err) if either the path derivation or the leaf-value hash
+// computation fails. All callers previously duplicated this two-step logic
+// inline; centralising it here makes the error semantics uniform and the
+// individual call-sites easier to read.
+func commitmentToLeaf(c *models.CertificationRequest) (*smt.Leaf, error) {
+	path, err := c.StateID.GetPath()
+	if err != nil {
+		return nil, fmt.Errorf("get path for stateID %s: %w", c.StateID.String(), err)
+	}
+	leafValue, err := c.LeafValue()
+	if err != nil {
+		return nil, fmt.Errorf("compute leaf value for stateID %s: %w", c.StateID.String(), err)
+	}
+	return smt.NewLeaf(path, leafValue), nil
+}
+
+// processMiniBatch inserts a small batch of commitments into the current
+// round's SMT snapshot.
+//
+// NOTE: The caller must hold rm.roundMutex before calling this function.
 func (rm *RoundManager) processMiniBatch(ctx context.Context, commitments []*models.CertificationRequest) error {
 	if len(commitments) == 0 {
 		return nil
 	}
 
-	// Convert commitments to SMT leaves, tracking valid commitments
 	leaves := make([]*smt.Leaf, 0, len(commitments))
 	validCommitments := make([]*models.CertificationRequest, 0, len(commitments))
 	for _, commitment := range commitments {
-		// Generate leaf path from stateID
-		path, err := commitment.StateID.GetPath()
+		leaf, err := commitmentToLeaf(commitment)
 		if err != nil {
-			rm.logger.WithContext(ctx).Error("Failed to get path for commitment",
+			rm.logger.WithContext(ctx).Error("Skipping commitment: failed to derive SMT leaf",
 				"stateID", commitment.StateID.String(),
 				"error", err.Error())
 			continue
 		}
-
-		// Create leaf value (hash of certification request data)
-		leafValue, err := commitment.LeafValue()
-		if err != nil {
-			rm.logger.WithContext(ctx).Error("Failed to create leaf value",
-				"stateID", commitment.StateID.String(),
-				"error", err.Error())
-			continue
-		}
-
-		leaves = append(leaves, smt.NewLeaf(path, leafValue))
+		leaves = append(leaves, leaf)
 		validCommitments = append(validCommitments, commitment)
 	}
 
@@ -318,14 +326,28 @@ func (rm *RoundManager) pollForParentProof(ctx context.Context, rootHash string)
 // ErrParentProofPollTimeout marks a single poll window timeout while waiting for a parent proof.
 var ErrParentProofPollTimeout = errors.New("parent shard inclusion proof poll timeout")
 
+// shardRootRetry tuning constants.
+const (
+	// shardRootMaxAttempts caps the number of submission attempts so a
+	// permanently-unreachable parent node does not stall the round forever.
+	shardRootMaxAttempts = 10
+	// shardRootBaseDelay is the initial retry delay; each subsequent attempt
+	// doubles it (exponential back-off) up to shardRootMaxDelay.
+	shardRootBaseDelay = 500 * time.Millisecond
+	// shardRootMaxDelay is the ceiling for the exponential back-off.
+	shardRootMaxDelay = 30 * time.Second
+)
+
+// submitShardRootWithRetry submits a shard root to the parent aggregator,
+// retrying with exponential back-off on transient failures.
+// It returns an error if the context is cancelled or all attempts are exhausted.
 func (rm *RoundManager) submitShardRootWithRetry(ctx context.Context, req *api.SubmitShardRootRequest) error {
 	if rm.rootClient == nil {
 		return fmt.Errorf("root client not configured")
 	}
 
-	var attempt int
-	for {
-		attempt++
+	delay := shardRootBaseDelay
+	for attempt := 1; attempt <= shardRootMaxAttempts; attempt++ {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -337,17 +359,31 @@ func (rm *RoundManager) submitShardRootWithRetry(ctx context.Context, req *api.S
 			}
 			return nil
 		} else {
-			rm.logger.WithContext(ctx).Warn("Failed to submit shard root to parent, retrying...",
+			rm.logger.WithContext(ctx).Warn("Failed to submit shard root to parent, will retry",
 				"attempt", attempt,
+				"maxAttempts", shardRootMaxAttempts,
+				"retryIn", delay.String(),
 				"error", err.Error())
+		}
+
+		if attempt == shardRootMaxAttempts {
+			break
 		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(1 * time.Second):
+		case <-time.After(delay):
+		}
+
+		// Exponential back-off with ceiling.
+		delay *= 2
+		if delay > shardRootMaxDelay {
+			delay = shardRootMaxDelay
 		}
 	}
+
+	return fmt.Errorf("failed to submit shard root after %d attempts", shardRootMaxAttempts)
 }
 
 const (
@@ -385,7 +421,14 @@ func (rm *RoundManager) FinalizeBlockWithRetry(ctx context.Context, block *model
 
 		if attempt < maxFinalizeRetries {
 			rm.logger.Info("Retrying FinalizeBlock", "attempt", attempt)
-			time.Sleep(finalizeRetryDelay)
+			// Use a context-aware timer so that a cancelled context
+			// (e.g. on shutdown) aborts the retry loop immediately instead
+			// of blocking for the full retry delay.
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("FinalizeBlock aborted during retry: %w", ctx.Err())
+			case <-time.After(finalizeRetryDelay):
+			}
 		}
 	}
 	return fmt.Errorf("FinalizeBlock failed after %d attempts", maxFinalizeRetries)
@@ -637,6 +680,9 @@ func (rm *RoundManager) storeBlockAndRecords(ctx context.Context, block *models.
 
 // storeDataParallel stores SMT nodes and aggregator records in parallel.
 // StoreBatch handles duplicates internally (ignores duplicate key errors).
+// If the context is cancelled while either goroutine is running, its error is
+// captured and returned with priority over other storage errors so callers can
+// distinguish a shutdown from a genuine write failure.
 func (rm *RoundManager) storeDataParallel(
 	ctx context.Context,
 	blockNumber *api.BigInt,
@@ -648,7 +694,6 @@ func (rm *RoundManager) storeDataParallel(
 	var smtErr, recordsErr error
 	var smtTime, recordsTime time.Duration
 
-	// Run SMT and AggregatorRecords storage in parallel
 	var wg sync.WaitGroup
 
 	if len(smtNodes) > 0 {
@@ -677,6 +722,12 @@ func (rm *RoundManager) storeDataParallel(
 		"recordCount", len(records),
 		"totalMs", time.Since(start).Milliseconds())
 
+	// Surface context cancellation with priority — a cancelled context means
+	// the node is shutting down, and the caller needs to distinguish that from
+	// a transient storage failure so it doesn't attempt recovery incorrectly.
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if smtErr != nil {
 		return fmt.Errorf("failed to store SMT nodes: %w", smtErr)
 	}
