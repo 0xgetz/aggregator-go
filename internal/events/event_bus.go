@@ -58,8 +58,9 @@ func (bus *EventBus) Publish(topic Topic, event Event) {
 	}
 }
 
-// Unsubscribe removes the subscriber from the subscribers list,
-// returns error if the provided topic does not exist or the subscriber was not found.
+// Unsubscribe removes the subscriber from the subscribers list and closes its
+// channel so that any goroutine ranging over it terminates cleanly.
+// Returns an error if the topic does not exist or the subscriber was not found.
 func (bus *EventBus) Unsubscribe(topic Topic, sub <-chan Event) error {
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
@@ -71,6 +72,11 @@ func (bus *EventBus) Unsubscribe(topic Topic, sub <-chan Event) error {
 	for i, s := range subs {
 		if s == sub {
 			bus.subscribers[topic] = slices.Delete(subs, i, i+1)
+			// Close the channel so range-over-channel consumers exit without
+			// blocking indefinitely. The channel must not be sent to after this
+			// point; Publish holds only an RLock so it cannot race here because
+			// we hold the write lock for the duration of the removal + close.
+			close(s)
 			return nil
 		}
 	}

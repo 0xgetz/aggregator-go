@@ -154,12 +154,13 @@ type GetBlockRecordsResponse struct {
 
 // Status constants for SubmitShardRootResponse
 const (
-	ShardRootStatusSuccess         = "SUCCESS"
-	ShardRootStatusInvalidShardID  = "INVALID_SHARD_ID"
-	ShardRootStatusInvalidRootHash = "INVALID_ROOT_HASH"
-	ShardRootStatusInternalError   = "INTERNAL_ERROR"
-	ShardRootStatusNotLeader       = "NOT_LEADER"
-	ShardRootStatusNotReady        = "NOT_READY"
+	ShardRootStatusSuccess              = "SUCCESS"
+	ShardRootStatusInvalidShardID       = "INVALID_SHARD_ID"
+	ShardRootStatusInvalidRootHash      = "INVALID_ROOT_HASH"
+	ShardRootStatusInvalidPreviousHash  = "INVALID_PREVIOUS_HASH"
+	ShardRootStatusInternalError        = "INTERNAL_ERROR"
+	ShardRootStatusNotLeader            = "NOT_LEADER"
+	ShardRootStatusNotReady             = "NOT_READY"
 )
 
 // Health status values returned by the health endpoint.
@@ -169,10 +170,15 @@ const (
 	HealthStatusDegraded  = "degraded"
 )
 
-// SubmitShardRootRequest represents the submit_shard_root JSON-RPC request
+// SubmitShardRootRequest represents the submit_shard_root JSON-RPC request.
+// PreviousRootHash is optional: when provided, the parent aggregator validates
+// that it matches the last known root hash for the shard before accepting the
+// update. This prevents lost-update races where two child aggregators submit
+// conflicting roots for the same shard within the same round.
 type SubmitShardRootRequest struct {
-	ShardID  ShardID  `json:"shardId"`
-	RootHash HexBytes `json:"rootHash"` // Raw root hash from child SMT
+	ShardID          ShardID  `json:"shardId"`
+	RootHash         HexBytes `json:"rootHash"`                   // New root hash from child SMT
+	PreviousRootHash HexBytes `json:"previousRootHash,omitempty"` // Optional: expected previous root hash for optimistic concurrency check
 }
 
 // SubmitShardRootResponse represents the submit_shard_root JSON-RPC response

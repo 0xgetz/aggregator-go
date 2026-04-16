@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -133,6 +134,43 @@ func (pas *ParentAggregatorService) SubmitShardRoot(ctx context.Context, req *ap
 		return &api.SubmitShardRootResponse{
 			Status: api.ShardRootStatusInvalidRootHash,
 		}, nil
+	}
+
+	// Optimistic concurrency check: if the caller supplied a PreviousRootHash,
+	// verify it matches the last persisted root hash for this shard so we catch
+	// lost-update races before they corrupt the parent SMT (GitHub issue #82).
+	if len(req.PreviousRootHash) > 0 {
+		shardKey := make([]byte, 4)
+		shardKey[0] = byte(req.ShardID >> 24)
+		shardKey[1] = byte(req.ShardID >> 16)
+		shardKey[2] = byte(req.ShardID >> 8)
+		shardKey[3] = byte(req.ShardID)
+		existingNode, storageErr := pas.storage.SmtStorage().GetByKey(ctx, api.NewHexBytes(shardKey))
+		if storageErr != nil {
+			pas.logger.WithContext(ctx).Error("Failed to fetch existing shard root for previous-hash validation",
+				"shardId", req.ShardID, "error", storageErr.Error())
+			return &api.SubmitShardRootResponse{
+				Status: api.ShardRootStatusInternalError,
+			}, nil
+		}
+		if existingNode == nil {
+			// No prior root stored — any non-empty previousRootHash is invalid.
+			pas.logger.WithContext(ctx).Warn("PreviousRootHash mismatch: no prior shard root exists but hash supplied",
+				"shardId", req.ShardID,
+				"suppliedPrevHash", req.PreviousRootHash.String())
+			return &api.SubmitShardRootResponse{
+				Status: api.ShardRootStatusInvalidPreviousHash,
+			}, nil
+		}
+		if !bytes.Equal(existingNode.Value, req.PreviousRootHash) {
+			pas.logger.WithContext(ctx).Warn("PreviousRootHash mismatch: stale update rejected",
+				"shardId", req.ShardID,
+				"expectedPrevHash", existingNode.Value.String(),
+				"suppliedPrevHash", req.PreviousRootHash.String())
+			return &api.SubmitShardRootResponse{
+				Status: api.ShardRootStatusInvalidPreviousHash,
+			}, nil
+		}
 	}
 
 	err = pas.parentRoundManager.SubmitShardRoot(ctx, update)

@@ -94,11 +94,17 @@ func TestEventBusUnsubscribe(t *testing.T) {
 		require.Fail(t, "ch3 should have received the event")
 	}
 
-	// Verify ch2 did not receive the event
+	// Verify ch2 did not receive a real event. After Unsubscribe the channel
+	// is closed so we use the two-value receive to distinguish a genuine event
+	// (ok=true) from a closed-channel signal (ok=false).
 	select {
-	case <-ch2:
-		require.Fail(t, "ch2 should not have received the event")
+	case e, ok := <-ch2:
+		if ok {
+			require.Fail(t, "ch2 should not have received the event", "got: %v", e)
+		}
+		// ok=false means the channel was closed — expected behaviour after Unsubscribe.
 	default:
+		// Nothing buffered and channel not yet drained — also acceptable.
 	}
 }
 
