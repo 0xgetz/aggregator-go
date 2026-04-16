@@ -298,9 +298,10 @@ func (pas *ParentAggregatorService) GetInclusionProofV2(ctx context.Context, req
 	return nil, fmt.Errorf("get_inclusion_proof.v2 is not supported in parent mode - use get_shard_proof instead")
 }
 
-// GetNoDeletionProof - TODO: implement
+// GetNoDeletionProof is not yet implemented for parent-mode aggregators.
+// Callers can detect this via errors.Is(err, errors.ErrUnsupported).
 func (pas *ParentAggregatorService) GetNoDeletionProof(ctx context.Context) (*api.GetNoDeletionProofResponse, error) {
-	return nil, fmt.Errorf("get_no_deletion_proof not implemented yet in parent mode")
+	return nil, fmt.Errorf("get_no_deletion_proof not implemented in parent mode: %w", errors.ErrUnsupported)
 }
 
 // GetBlockHeight retrieves the current parent block height
@@ -315,19 +316,22 @@ func (pas *ParentAggregatorService) GetBlockHeight(ctx context.Context) (*api.Ge
 	}, nil
 }
 
-// GetBlock - TODO: implement
+// GetBlock is not yet implemented for parent-mode aggregators.
+// Callers can detect this via errors.Is(err, errors.ErrUnsupported).
 func (pas *ParentAggregatorService) GetBlock(ctx context.Context, req *api.GetBlockRequest) (*api.GetBlockResponse, error) {
-	return nil, fmt.Errorf("get_block not implemented yet in parent mode")
+	return nil, fmt.Errorf("get_block not implemented in parent mode: %w", errors.ErrUnsupported)
 }
 
-// GetBlockCommitments - TODO: implement
+// GetBlockCommitments is not yet implemented for parent-mode aggregators.
+// Callers can detect this via errors.Is(err, errors.ErrUnsupported).
 func (pas *ParentAggregatorService) GetBlockCommitments(ctx context.Context, req *api.GetBlockCommitmentsRequest) (*api.GetBlockCommitmentsResponse, error) {
-	return nil, fmt.Errorf("get_block_commitments not implemented yet in parent mode")
+	return nil, fmt.Errorf("get_block_commitments not implemented in parent mode: %w", errors.ErrUnsupported)
 }
 
-// GetBlockRecords - TODO: implement
+// GetBlockRecords is not yet implemented for parent-mode aggregators.
+// Callers can detect this via errors.Is(err, errors.ErrUnsupported).
 func (pas *ParentAggregatorService) GetBlockRecords(ctx context.Context, req *api.GetBlockRecords) (*api.GetBlockRecordsResponse, error) {
-	return nil, fmt.Errorf("get_block_records not implemented yet in parent mode")
+	return nil, fmt.Errorf("get_block_records not implemented in parent mode: %w", errors.ErrUnsupported)
 }
 
 // GetHealthStatus retrieves the health status of the parent aggregator service

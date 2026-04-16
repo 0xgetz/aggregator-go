@@ -1,7 +1,19 @@
+// Package service implements the core business logic of the aggregator node.
+//
+// [AggregatorService] is the central orchestrator. It bridges the public API
+// layer ([gateway]) with the round management system ([round]) and the
+// persistence layer ([storage/mongodb]).  All methods on AggregatorService are
+// safe to call concurrently; internal state is protected by the round manager's
+// own mutexes.
+//
+// Typical request flow:
+//
+//	gateway handler  →  AggregatorService method  →  round.RoundManager / storage
 package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -483,15 +495,17 @@ func (as *AggregatorService) GetInclusionProofV2(ctx context.Context, req *api.G
 	}, nil
 }
 
-// GetNoDeletionProof retrieves the global no-deletion proof
+// GetNoDeletionProof retrieves the global no-deletion proof.
+//
+// TODO(#unimplemented): Full no-deletion proof generation requires iterating
+// the entire SMT and producing a cryptographic proof that no leaf has been
+// silently removed between two consecutive root hashes. This is a substantial
+// piece of work that depends on the SMT audit-log design and is tracked
+// separately. Callers should treat the ErrUnsupported response as a signal
+// that the feature is planned but not yet available, rather than a transient
+// error that should be retried.
 func (as *AggregatorService) GetNoDeletionProof(ctx context.Context) (*api.GetNoDeletionProofResponse, error) {
-	// TODO: Implement no-deletion proof generation
-	// For now, return a placeholder
-	proof := api.NewNoDeletionProof(api.HexBytes("mock_no_deletion_proof"))
-
-	return &api.GetNoDeletionProofResponse{
-		NoDeletionProof: proof,
-	}, nil
+	return nil, fmt.Errorf("GetNoDeletionProof: %w", errors.ErrUnsupported)
 }
 
 // GetBlockHeight retrieves the current block height
