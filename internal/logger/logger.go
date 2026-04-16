@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -225,13 +226,18 @@ func (l *Logger) ErrorfContext(ctx context.Context, format string, args ...inter
 	l.WithContext(ctx).Error(format, args...)
 }
 
-// Compatibility methods for easier migration from logrus
+// Fatal logs a message at ERROR level using fmt.Sprint formatting and then
+// terminates the process with exit code 1.
+// Compatibility shim for code migrated from logrus/log.
 func (l *Logger) Fatal(args ...interface{}) {
-	l.Logger.Error("fatal error", slog.Any("args", args))
+	l.Logger.Error(fmt.Sprint(args...))
 	os.Exit(1)
 }
 
+// Fatalf logs a message at ERROR level using fmt.Sprintf formatting and then
+// terminates the process with exit code 1.
+// Compatibility shim for code migrated from logrus/log.
 func (l *Logger) Fatalf(format string, args ...interface{}) {
-	l.Logger.Error("fatal error", slog.String("msg", format), slog.Any("args", args))
+	l.Logger.Error(fmt.Sprintf(format, args...))
 	os.Exit(1)
 }
